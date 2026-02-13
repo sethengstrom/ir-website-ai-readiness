@@ -25,12 +25,35 @@ export function analyzeParseability(pages: CrawlPage[]): { score: number; findin
     const $ = cheerio.load(page.html);
     const { text, boilerplate } = getMainContent(page.html);
 
+    const title = $("title").first().text().trim();
+    const metaDesc = $('meta[name="description"]').attr("content")?.trim();
+    const canonical = $('link[rel="canonical"]').attr("href");
     const textLength = text.length;
     const hasMeaningfulLength = textLength >= 500;
     const h1 = $("h1").length;
     const h2 = $("h2").length;
     const hasHeadings = h1 >= 1 && (h1 + h2) >= 2;
-    const canonical = $('link[rel="canonical"]').attr("href");
+
+    if (title) {
+      findings.push({
+        category: "Parseability",
+        subcategory: "Meta",
+        signal: "Title tag present",
+        score: 100,
+        evidence: { url: page.url, snippet: title.slice(0, 80) + (title.length > 80 ? "…" : ""), method: "html_parse" },
+        passed: true,
+      });
+    }
+    if (metaDesc) {
+      findings.push({
+        category: "Parseability",
+        subcategory: "Meta",
+        signal: "Meta description present",
+        score: 100,
+        evidence: { url: page.url, snippet: metaDesc.slice(0, 80) + (metaDesc.length > 80 ? "…" : ""), method: "html_parse" },
+        passed: true,
+      });
+    }
 
     totalScore += hasMeaningfulLength ? 25 : Math.min(25, (textLength / 500) * 25);
     totalScore += hasHeadings ? 25 : (h1 + h2) > 0 ? 12 : 0;

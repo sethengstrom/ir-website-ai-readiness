@@ -11,7 +11,8 @@ export type DetectionMethod =
   | "html_parse"
   | "heuristic"
   | "link_tag"
-  | "canonical";
+  | "canonical"
+  | "http_header";
 
 export interface Finding {
   category: string;

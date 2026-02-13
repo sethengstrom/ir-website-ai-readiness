@@ -9,38 +9,99 @@ const SCHEMA_TYPES_OF_INTEREST = [
   "PressRelease",
   "Event",
   "Organization",
+  "Corporation",
   "WebPage",
   "FinancialReport",
+  "Report",
+  "BreadcrumbList",
 ];
-
-function extractJsonLdTypes(html: string): { types: string[]; raw: string }[] {
-  const $ = cheerio.load(html);
-  const results: { types: string[]; raw: string }[] = [];
-  $('script[type="application/ld+json"]').each((_, el) => {
-    const text = $(el).html()?.trim();
-    if (!text) return;
-    try {
-      let data = JSON.parse(text);
-      if (Array.isArray(data)) {
-        data.forEach((item) => {
-          const types = getTypes(item);
-          if (types.length) results.push({ types, raw: text.slice(0, 200) });
-        });
-      } else {
-        const types = getTypes(data);
-        if (types.length) results.push({ types, raw: text.slice(0, 200) });
-      }
-    } catch {
-      // ignore invalid JSON-LD
-    }
-  });
-  return results;
-}
 
 function getTypes(obj: { "@type"?: string | string[] }): string[] {
   const t = obj["@type"];
   if (!t) return [];
   return Array.isArray(t) ? t : [t];
+}
+
+function hasDateFields(obj: unknown): boolean {
+  if (!obj || typeof obj !== "object") return false;
+  const o = obj as Record<string, unknown>;
+  if (o.datePublished || o.dateModified || o.dateCreated) return true;
+  if (o.mainEntity && hasDateFields(o.mainEntity)) return true;
+  return false;
+}
+
+function hasOrganizationIdentity(obj: Record<string, unknown>): boolean {
+  const name = obj.name ?? obj.legalName;
+  const hasName = typeof name === "string" && name.trim().length > 0;
+  const hasUrl =
+    typeof obj.url === "string" ||
+    (typeof obj.url === "object" && obj.url != null) ||
+    (Array.isArray(obj.sameAs) && obj.sameAs.length > 0) ||
+    (typeof obj.sameAs === "string" && obj.sameAs.trim().length > 0);
+  const hasLogo = typeof obj.logo === "string" || (typeof obj.logo === "object" && obj.logo != null);
+  return hasName && (hasUrl || hasLogo);
+}
+
+// Walk objects/arrays to find any node with datePublished/dateModified
+function anyNodeHasDates(obj: unknown): boolean {
+  if (!obj || typeof obj !== "object") return false;
+  const o = obj as Record<string, unknown>;
+  if (o.datePublished || o.dateModified || o.dateCreated) return true;
+  for (const v of Object.values(o)) {
+    if (Array.isArray(v)) {
+      if (v.some((item) => anyNodeHasDates(item))) return true;
+    } else if (typeof v === "object" && v !== null) {
+      if (anyNodeHasDates(v)) return true;
+    }
+  }
+  return false;
+}
+
+/** Flatten @graph so Organization/WebPage inside are detected (common pattern on IR sites). */
+function flattenJsonLdItems(data: unknown): unknown[] {
+  const items = Array.isArray(data) ? data : [data];
+  const out: unknown[] = [];
+  for (const item of items) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    if (Array.isArray(o["@graph"])) {
+      for (const g of o["@graph"]) {
+        if (g && typeof g === "object") out.push(g);
+      }
+    } else {
+      out.push(item);
+    }
+  }
+  return out;
+}
+
+function extractJsonLdBlocks(html: string): { types: string[]; raw: string; obj: unknown }[] {
+  const $ = cheerio.load(html);
+  const results: { types: string[]; raw: string; obj: unknown }[] = [];
+  $('script[type="application/ld+json"]').each((_, el) => {
+    const text = $(el).html()?.trim();
+    if (!text) return;
+    try {
+      let data: unknown = JSON.parse(text);
+      // Some sites serve JSON-LD as an escaped string inside the script
+      if (typeof data === "string") {
+        try {
+          data = JSON.parse(data);
+        } catch {
+          return;
+        }
+      }
+      const items = flattenJsonLdItems(data);
+      items.forEach((item) => {
+        if (!item || typeof item !== "object") return;
+        const types = getTypes(item as { "@type"?: string | string[] });
+        if (types.length) results.push({ types, raw: text.slice(0, 200), obj: item });
+      });
+    } catch {
+      // ignore invalid JSON-LD
+    }
+  });
+  return results;
 }
 
 function detectFeedUrls(html: string, baseOrigin: string): { href: string; type: string }[] {
@@ -72,23 +133,108 @@ export function analyzeStructuredData(
   const allSchemaTypes: { type: string; url: string; snippet: string }[] = [];
   const feedUrls = new Set<string>();
 
+  let hasOrgWithIdentity = false;
+  let hasMachineReadableDates = false;
+  let hasBreadcrumbList = false;
+  let hasTickerSymbol = false;
+  let totalJsonLdBlocks = 0;
+
   for (const page of pages) {
-    const items = extractJsonLdTypes(page.html);
-    for (const { types, raw } of items) {
+    const items = extractJsonLdBlocks(page.html);
+    totalJsonLdBlocks += items.length;
+    for (const { types, raw, obj } of items) {
       for (const t of types) {
         if (!seenTypes.has(t)) {
           seenTypes.add(t);
           allSchemaTypes.push({ type: t, url: page.url, snippet: raw });
         }
       }
+      const o = obj as Record<string, unknown>;
+      const typesList = getTypes(o as { "@type"?: string | string[] });
+      if (
+        typesList.some((t) => t === "Organization" || t === "Corporation") &&
+        hasOrganizationIdentity(o)
+      ) {
+        hasOrgWithIdentity = true;
+        if (typeof o.tickerSymbol === "string" && o.tickerSymbol.trim()) hasTickerSymbol = true;
+      }
+      if (typesList.includes("BreadcrumbList")) hasBreadcrumbList = true;
+      if (anyNodeHasDates(obj)) hasMachineReadableDates = true;
     }
     const feeds = detectFeedUrls(page.html, origin);
     feeds.forEach((f) => feedUrls.add(f.href));
   }
 
-  // Check for interesting schema types
+  // Base score from schema types of interest (IR/LLM-relevant)
   const ofInterest = SCHEMA_TYPES_OF_INTEREST.filter((t) => seenTypes.has(t));
-  const schemaScore = ofInterest.length >= 4 ? 100 : ofInterest.length >= 2 ? 70 : ofInterest.length >= 1 ? 40 : 0;
+  let schemaScore =
+    ofInterest.length >= 4 ? 85 : ofInterest.length >= 2 ? 65 : ofInterest.length >= 1 ? 45 : 0;
+
+  // LLM/IR-friendly bonuses: reward schema designed for AI to read and cite
+  let llmBonus = 0;
+  if (hasOrgWithIdentity) {
+    llmBonus += 20;
+    findings.push({
+      category: "Structured data",
+      subcategory: "IR/LLM-friendly",
+      signal: "Organization/Corporation with identity (name + url/logo)",
+      score: 100,
+      evidence: {
+        url: allSchemaTypes.find((s) => s.type === "Organization" || s.type === "Corporation")?.url,
+        snippet: "Helps AI identify and cite your company",
+        method: "json_ld",
+      },
+      passed: true,
+    });
+  }
+  if (hasMachineReadableDates) {
+    llmBonus += 15;
+    findings.push({
+      category: "Structured data",
+      subcategory: "IR/LLM-friendly",
+      signal: "Machine-readable dates (datePublished/dateModified) in schema",
+      score: 100,
+      evidence: {
+        snippet: "Helps LLMs use and cite content with correct dates",
+        method: "json_ld",
+      },
+      passed: true,
+    });
+  }
+  if (hasBreadcrumbList) {
+    llmBonus += 5;
+    findings.push({
+      category: "Structured data",
+      subcategory: "IR/LLM-friendly",
+      signal: "BreadcrumbList for page context",
+      score: 100,
+      evidence: { method: "json_ld" },
+      passed: true,
+    });
+  }
+  if (hasTickerSymbol) {
+    llmBonus += 10;
+    findings.push({
+      category: "Structured data",
+      subcategory: "IR/LLM-friendly",
+      signal: "Corporation ticker symbol in schema",
+      score: 100,
+      evidence: { snippet: "Investor-oriented identifier for AI", method: "json_ld" },
+      passed: true,
+    });
+  }
+  if (totalJsonLdBlocks >= 2) {
+    findings.push({
+      category: "Structured data",
+      subcategory: "JSON-LD",
+      signal: `Multiple JSON-LD blocks (${totalJsonLdBlocks})`,
+      score: 80,
+      evidence: { snippet: "Indicates intentional structured data for agents", method: "json_ld" },
+      passed: true,
+    });
+  }
+
+  schemaScore = Math.min(100, schemaScore + llmBonus);
 
   if (allSchemaTypes.length > 0) {
     findings.push({
@@ -114,7 +260,16 @@ export function analyzeStructuredData(
     });
   }
 
-  ["FAQPage", "QAPage", "NewsArticle", "PressRelease", "Event", "Organization"].forEach((t) => {
+  [
+    "FAQPage",
+    "QAPage",
+    "NewsArticle",
+    "PressRelease",
+    "Event",
+    "Organization",
+    "Corporation",
+    "BreadcrumbList",
+  ].forEach((t) => {
     findings.push({
       category: "Structured data",
       subcategory: "JSON-LD",
@@ -142,6 +297,6 @@ export function analyzeStructuredData(
     passed: feedCount >= 1,
   });
 
-  const score = Math.round((schemaScore * 0.7 + feedScore * 0.3));
+  const score = Math.round(schemaScore * 0.65 + feedScore * 0.35);
   return { score: Math.min(100, score), findings };
 }

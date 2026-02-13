@@ -73,13 +73,15 @@ npm start
 
 No code changes are required beyond the schema provider and env.
 
-## Crawler behavior
+## Scanner behavior (lightweight, sales-demo)
 
-- **Robots.txt**: Fetched and parsed; disallow for `/investors` and `/investor-relations` is checked; crawl scope respects these rules.
-- **Rate limiting**: 500 ms between requests; configurable in `src/lib/crawler.ts`.
-- **Timeouts**: 10–15 s per request; retries (2) with backoff.
-- **URLs**: Normalized (no hash, sorted query); same-domain only.
-- **Sitemap**: Tries `sitemap.xml`, `sitemap_index.xml`, etc.; follows sitemap index to child sitemaps; collects IR-related URLs first, then fills up to a page limit.
+This is a **lightweight, deterministic** scanner suitable for Vercel serverless and sales demos. It does **not** perform deep crawling or sitemap traversal.
+
+- **Per domain:** Up to **5 requests** only: homepage, `/robots.txt`, `/sitemap.xml`, `/investor`, `/ir`. No recursive links, no queue, no depth.
+- **Timeout:** **8 seconds** per request (AbortController). Total scan typically completes in under 30s.
+- **Robots.txt:** Fetched and parsed; disallow for `/investors` and `/investor-relations` is checked.
+- **Sitemap.xml:** Fetched and parsed only to count `<loc>` URLs in that single file; **URLs inside are not crawled**.
+- **Analysis:** JSON-LD blocks, `<title>`, canonical, meta description, Organization/Corporation schema, HTTP status, response time, Last-Modified. Same output shape (scores + findings) so the UI is unchanged.
 
 ## Project structure
 
@@ -92,9 +94,9 @@ src/
     page.tsx             # Dashboard UI
     globals.css
   lib/
-    crawler.ts           # Sitemap-first + fallback crawl
-    robots.ts            # robots.txt fetch/parse
-    sitemap.ts           # Sitemap discovery + parse
+    crawler.ts           # Lightweight fetch (5 URLs, 8s timeout, no traversal)
+    robots.ts            # robots.txt types (parsing in crawler)
+    sitemap.ts           # SitemapResult type (parsing in crawler)
     url-utils.ts         # Normalization, same-domain, IR path heuristics
     db.ts                # Prisma singleton
     types.ts             # Finding, DomainResult, CategoryScores
@@ -105,6 +107,7 @@ src/
       parseability.ts
       freshness.ts
       ir-checklist.ts
+      response-metrics.ts  # HTTP status, response time, Last-Modified
 prisma/
   schema.prisma
 ```

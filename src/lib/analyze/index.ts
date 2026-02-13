@@ -7,6 +7,7 @@ import { analyzeStructuredData } from "./structured-data";
 import { analyzeParseability } from "./parseability";
 import { analyzeFreshness } from "./freshness";
 import { analyzeIRChecklist } from "./ir-checklist";
+import { analyzeResponseMetrics } from "./response-metrics";
 
 export function analyzeDomain(result: CrawlResult): DomainResult {
   const crawlability = analyzeCrawlability(result);
@@ -14,6 +15,7 @@ export function analyzeDomain(result: CrawlResult): DomainResult {
   const parseability = analyzeParseability(result.pages);
   const freshness = analyzeFreshness(result.pages);
   const irChecklist = analyzeIRChecklist(result.pages);
+  const responseMetrics = analyzeResponseMetrics(result.pages);
 
   const categoryScores: CategoryScores = {
     crawlability: crawlability.score,
@@ -29,6 +31,7 @@ export function analyzeDomain(result: CrawlResult): DomainResult {
     ...parseability.findings,
     ...freshness.findings,
     ...irChecklist.findings,
+    ...responseMetrics.findings,
   ];
 
   const weights = {

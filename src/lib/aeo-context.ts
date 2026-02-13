@@ -13,32 +13,64 @@ export type CategoryKey = keyof typeof CATEGORY_CONTEXT;
 
 export const CATEGORY_CONTEXT: Record<
   string,
-  { what: string; why: string; scoreMeaning: string }
+  { what: string; why: string; scoreMeaning: string; improvements: string[] }
 > = {
   crawlability: {
     what: "Whether robots.txt and sitemaps allow discovery of your IR section, and how many IR-related URLs we find.",
     why: "AI crawlers and answer engines need to discover your IR pages. Blocking /investors or /investor-relations in robots.txt, or having no sitemap, makes it harder for systems to index and cite your content.",
     scoreMeaning: "100 = robots.txt reachable, IR paths not disallowed, sitemap reachable, and multiple IR URLs discovered. Lower scores indicate blocks or poor discoverability.",
+    improvements: [
+      "Ensure robots.txt is reachable and does not Disallow: /investors or /investor-relations.",
+      "Publish a sitemap (e.g. sitemap.xml) and reference it in robots.txt or at the root.",
+      "Use clear IR paths (e.g. /investor, /investors, /ir) so crawlers and the sitemap can discover them.",
+    ],
   },
   structuredData: {
-    what: "JSON-LD schema (e.g. Organization, NewsArticle, Event, FAQPage) and RSS/Atom feeds.",
-    why: "Structured data tells AI exactly what a page is about and how to use it. Feeds give agents a reliable, machine-friendly list of news and events. Both improve how often and how accurately your content is cited.",
-    scoreMeaning: "100 = rich schema types (e.g. NewsArticle, Event, Organization) and at least one feed. Lower scores mean less structure for agents to parse.",
+    what: "JSON-LD schema (Organization, NewsArticle, Event, etc.), machine-readable dates (datePublished/dateModified), identity (name, logo, url), and RSS/Atom feeds.",
+    why: "Schema designed for LLMs—Organization with identity, dates in schema, BreadcrumbList—makes it easier for AI to cite your content with correct attribution and dates. Feeds give agents a machine-friendly list of news and events.",
+    scoreMeaning: "Higher scores reward Organization/Corporation with name+url/logo, datePublished/dateModified in schema, BreadcrumbList, ticker symbol, and feeds. Sites built for AI answer engines score best here.",
+    improvements: [
+      "Add at least one RSS or Atom feed for IR content (press releases, events, or news) and link it with <link rel=\"alternate\" type=\"application/rss+xml\" … />.",
+      "Use Organization or Corporation JSON-LD with name and url (or logo); add tickerSymbol for the stock ticker.",
+      "Add datePublished and dateModified in JSON-LD (e.g. on WebPage or NewsArticle) so AI can cite dates.",
+      "Add BreadcrumbList JSON-LD on key IR pages.",
+      "Use multiple relevant schema types (e.g. NewsArticle, Event, FAQPage) where they fit the content.",
+    ],
   },
   parseability: {
     what: "Server-rendered text length, ratio of main content to boilerplate, headings (H1/H2), and canonical URLs.",
     why: "AI systems need clear, substantial text to extract facts and quotes. Heavy boilerplate, thin content, or missing headings make it harder to understand and cite your pages. Canonicals reduce duplicate-content confusion.",
     scoreMeaning: "100 = substantial main content, good content ratio, clear headings, and canonical tags on key pages. Lower scores suggest thin or noisy pages.",
+    improvements: [
+      "Serve meaningful, server-rendered main content (e.g. in <main> or [role=\"main\"]) with at least ~500 characters of text.",
+      "Use one H1 and at least one H2 per page so structure is clear.",
+      "Add <link rel=\"canonical\" href=\"…\" /> on key IR pages.",
+      "Include unique <title> and meta name=\"description\" on every page.",
+      "Keep main content ratio high (avoid wrapping most text in nav/footer so boilerplate dominates).",
+    ],
   },
   freshness: {
     what: "Signals that content is current: earnings/results hubs, dates on press/events pages, and archive sections.",
     why: "Answer engines prioritize recent, dated content. A clear “latest earnings” area and visible dates help AI surface your most relevant, up-to-date information instead of outdated snippets.",
     scoreMeaning: "100 = earnings hub detected, dates on releases/events, and archive-style pages. Lower scores suggest weaker freshness signals.",
+    improvements: [
+      "Add a clear earnings or financial results hub (page or section with terms like earnings, results, quarter, webcast, transcript).",
+      "Show visible dates (e.g. YYYY-MM-DD or Jan 15, 2025) on press releases and event pages.",
+      "Provide archive or all releases / past events pages (URLs containing archive, releases, or events).",
+    ],
   },
   irChecklist: {
     what: "Presence of filings (SEC/EDGAR or SEDAR+), investor presentation, press releases, events/webcasts, IR contact, and governance/ESG links.",
     why: "Complete IR coverage gives AI and agents the full picture—filings, presentations, news, events, and governance—so they can answer questions accurately and link to authoritative sources.",
     scoreMeaning: "100 = all six elements present (filings, presentation, press, events, contact, governance). Score is the share of these we detected.",
+    improvements: [
+      "Link to SEC/EDGAR, SEDAR+, or a clear filings / financial reports page.",
+      "Link to an investor presentation or investor deck.",
+      "Link to press releases, newsroom, or announcements.",
+      "Link to events, webcasts, or earnings call info.",
+      "Provide visible IR contact (e.g. investor relations, IR@ email).",
+      "Link to governance, ESG, sustainability, or board information.",
+    ],
   },
 };
 
@@ -57,6 +89,8 @@ const FINDING_WHY: Record<string, string> = {
     "JSON-LD schema tells AI what each page is (e.g. NewsArticle, Event, Organization), so it can cite it correctly and use the right fields (dates, author, etc.).",
   "structureddata|feeds":
     "RSS/Atom feeds give agents a machine-friendly list of news and events, so they can surface your latest updates without scraping every page.",
+  "structureddata|ir/llm-friendly":
+    "Schema built for LLMs—Organization identity, machine-readable dates, breadcrumbs, ticker—helps AI cite your IR content correctly and use it as a source for user answers.",
   "parseability|content":
     "AI needs substantial, server-rendered text to extract facts and quotes. Thin or boilerplate-heavy pages are hard to use and get cited less.",
   "parseability|headings":
@@ -71,6 +105,14 @@ const FINDING_WHY: Record<string, string> = {
     "Archive or “all releases” pages show agents you maintain historical content and give them a single place to discover past items.",
   "irchecklist|checklist":
     "Each item (filings, presentation, press, events, contact, governance) gives agents an authoritative place to link to when answering investor questions.",
+  "response|http":
+    "Healthy HTTP status (2xx) means the page is reachable; agents and crawlers can access your content.",
+  "response|timing":
+    "Faster response times improve crawl efficiency and user experience when agents or users request your pages.",
+  "response|headers":
+    "Last-Modified helps agents and caches know when content was updated, so they can prefer fresh data.",
+  "parseability|meta":
+    "Title and meta description help agents and search engines understand and summarize the page.",
 };
 
 function key(category: string, subcategory?: string): string {

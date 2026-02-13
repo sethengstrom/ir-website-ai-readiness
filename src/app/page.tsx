@@ -46,6 +46,80 @@ function scoreColorClass(score: number): string {
   return "text-red-400";
 }
 
+function CategoryRows({
+  resultA,
+  resultB,
+  scoreColorClass,
+}: {
+  resultA: DomainResult;
+  resultB: DomainResult;
+  scoreColorClass: (n: number) => string;
+}) {
+  const [openImprovements, setOpenImprovements] = useState<Set<string>>(new Set());
+  const toggle = (key: string) => {
+    setOpenImprovements((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+  return (
+    <div className="divide-y divide-zinc-700/50">
+      {CATEGORY_ITEMS.map(({ key, label }) => {
+        const ctx = CATEGORY_CONTEXT[key];
+        if (!ctx) return null;
+        const scoreA = resultA.categoryScores[key] ?? 0;
+        const scoreB = resultB.categoryScores[key] ?? 0;
+        const hasImprovements = (ctx.improvements?.length ?? 0) > 0;
+        const isOpen = openImprovements.has(key);
+        return (
+          <div
+            key={key}
+            className="grid grid-cols-[3rem_1fr_3rem] gap-3 md:gap-4 px-4 py-3 md:py-2.5 items-start"
+          >
+            <span className={`text-2xl font-bold tabular-nums text-right shrink-0 pt-0.5 ${scoreColorClass(scoreA)}`}>
+              {scoreA}
+            </span>
+            <div className="min-w-0">
+              <h3 className="font-medium text-white text-sm mb-1">{label}</h3>
+              <p className="text-xs text-zinc-400 leading-snug">
+                {ctx.what} {ctx.why}
+              </p>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                <span className="font-medium text-zinc-500">Score:</span> {ctx.scoreMeaning}
+              </p>
+              {hasImprovements && (
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => toggle(key)}
+                    className="text-xs font-medium text-zinc-500 hover:text-zinc-400 flex items-center gap-1 transition-colors"
+                    aria-expanded={isOpen}
+                  >
+                    <span className="text-zinc-500" aria-hidden>{isOpen ? "▼" : "▶"}</span>
+                    How to improve
+                  </button>
+                  {isOpen && (
+                    <ul className="text-xs text-zinc-400 space-y-0.5 list-disc list-inside mt-1">
+                      {ctx.improvements!.map((item, i) => (
+                        <li key={i}>{item}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+            <span className={`text-2xl font-bold tabular-nums text-left shrink-0 pt-0.5 ${scoreColorClass(scoreB)}`}>
+              {scoreB}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ResultsByCategory({
   resultA,
   resultB,
@@ -109,36 +183,11 @@ function ResultsByCategory({
       </div>
 
       {/* Category rows: Score A | Description | Score B - scores aligned in fixed columns */}
-      <div className="divide-y divide-zinc-700/50">
-        {CATEGORY_ITEMS.map(({ key, label }) => {
-          const ctx = CATEGORY_CONTEXT[key];
-          if (!ctx) return null;
-          const scoreA = resultA.categoryScores[key] ?? 0;
-          const scoreB = resultB.categoryScores[key] ?? 0;
-          return (
-            <div
-              key={key}
-              className="grid grid-cols-[3rem_1fr_3rem] gap-3 md:gap-4 px-4 py-3 md:py-2.5 items-start"
-            >
-              <span className={`text-2xl font-bold tabular-nums text-right shrink-0 pt-0.5 ${scoreColorClass(scoreA)}`}>
-                {scoreA}
-              </span>
-              <div className="min-w-0">
-                <h3 className="font-medium text-white text-sm mb-1">{label}</h3>
-                <p className="text-xs text-zinc-400 leading-snug">
-                  {ctx.what} {ctx.why}
-                </p>
-                <p className="text-xs text-zinc-500 mt-0.5">
-                  <span className="font-medium text-zinc-500">Score:</span> {ctx.scoreMeaning}
-                </p>
-              </div>
-              <span className={`text-2xl font-bold tabular-nums text-left shrink-0 pt-0.5 ${scoreColorClass(scoreB)}`}>
-                {scoreB}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+      <CategoryRows
+        resultA={resultA}
+        resultB={resultB}
+        scoreColorClass={scoreColorClass}
+      />
     </section>
   );
 }
@@ -394,7 +443,7 @@ export default function Home() {
               />
             </div>
             <p className="text-sm text-zinc-500">
-              This usually takes <strong className="text-zinc-400">1–3 minutes</strong>. We crawl sitemaps and key IR pages (with rate limiting), then analyze each site. Please don’t close this page.
+              This usually takes <strong className="text-zinc-400">under 30 seconds</strong>. We fetch the homepage, key IR paths, robots.txt, and sitemap, then analyze each site. Please don’t close this page.
             </p>
           </div>
         )}

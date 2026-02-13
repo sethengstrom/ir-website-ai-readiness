@@ -1,10 +1,14 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+// Lightweight fetch (5 requests × 8s) completes quickly; 30s is ample for Vercel serverless
+export const maxDuration = 30;
 
 import { NextRequest, NextResponse } from "next/server";
 
 
 const CACHE_DAYS = 7;
+/** Set to true to return cached results for same domain pair within CACHE_DAYS. Disabled while scans are fast. */
+const USE_CACHE = false;
 
 function normalizeDomainInput(input: string): string {
   const s = input.trim().toLowerCase();
@@ -41,26 +45,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const cacheCutoff = new Date();
-    cacheCutoff.setDate(cacheCutoff.getDate() - CACHE_DAYS);
-
-    const cached = await prisma.scanRun.findFirst({
-      where: {
-        status: "completed",
-        finishedAt: { not: null, gte: cacheCutoff },
-        OR: [{ domainA, domainB }, { domainA: domainB, domainB: domainA }],
-      },
-      orderBy: { finishedAt: "desc" },
-    });
-
-    if (cached?.resultA && cached?.resultB && cached.finishedAt) {
-      return NextResponse.json({
-        runId: cached.id,
-        resultA: JSON.parse(cached.resultA) as unknown,
-        resultB: JSON.parse(cached.resultB) as unknown,
-        cached: true,
-        cachedAt: cached.finishedAt.toISOString(),
+    if (USE_CACHE) {
+      const cacheCutoff = new Date();
+      cacheCutoff.setDate(cacheCutoff.getDate() - CACHE_DAYS);
+      const cached = await prisma.scanRun.findFirst({
+        where: {
+          status: "completed",
+          finishedAt: { not: null, gte: cacheCutoff },
+          OR: [{ domainA, domainB }, { domainA: domainB, domainB: domainA }],
+        },
+        orderBy: { finishedAt: "desc" },
       });
+      if (cached?.resultA && cached?.resultB && cached.finishedAt) {
+        return NextResponse.json({
+          runId: cached.id,
+          resultA: JSON.parse(cached.resultA) as unknown,
+          resultB: JSON.parse(cached.resultB) as unknown,
+          cached: true,
+          cachedAt: cached.finishedAt.toISOString(),
+        });
+      }
     }
 
     const run = await prisma.scanRun.create({
@@ -75,7 +79,6 @@ export async function POST(request: NextRequest) {
       crawlDomain(domainA),
       crawlDomain(domainB),
     ]);
-
     const resultA = analyzeDomain(crawlResultA);
     const resultB = analyzeDomain(crawlResultB);
 
