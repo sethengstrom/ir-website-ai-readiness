@@ -38,6 +38,9 @@ const PRESET_IR_SITES: { name: string; url: string }[] = [
   { name: "NVIDIA", url: "https://investor.nvidia.com" },
   { name: "Visa", url: "https://investor.visa.com" },
   { name: "Chase", url: "https://www.jpmorganchase.com/ir" },
+  { name: "Workday", url: "https://workday.com" },
+  { name: "Tetra Tech", url: "https://investor.tetratech.com/overview/default.aspx" },
+  { name: "Emera", url: "https://investors.emera.com/overview/default.aspx" },
 ];
 
 function scoreColorClass(score: number): string {
@@ -387,7 +390,7 @@ export default function Home() {
               disabled={loading}
             />
             <div className="flex flex-wrap gap-1.5 mt-2">
-              {PRESET_IR_SITES.slice(0, 3).map(({ name, url }) => (
+              {PRESET_IR_SITES.slice(0, 6).map(({ name, url }) => (
                 <button
                   key={`a-${name}`}
                   type="button"
@@ -418,7 +421,7 @@ export default function Home() {
               disabled={loading}
             />
             <div className="flex flex-wrap gap-1.5 mt-2">
-              {PRESET_IR_SITES.slice(3, 6).map(({ name, url }) => (
+              {PRESET_IR_SITES.slice(6, 9).map(({ name, url }) => (
                 <button
                   key={`b-${name}`}
                   type="button"
