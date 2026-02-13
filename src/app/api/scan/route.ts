@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-// Lightweight fetch (5 requests × 8s) completes quickly; 30s is ample for Vercel serverless
-export const maxDuration = 30;
+// Parallel fetches keep scan under ~6–8s so it fits Vercel Hobby 10s limit; 15s allows buffer
+export const maxDuration = 15;
 
 import { NextRequest, NextResponse } from "next/server";
 

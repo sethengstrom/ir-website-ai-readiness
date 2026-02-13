@@ -1,7 +1,7 @@
 /**
  * Lightweight fetcher for sales-demo: no deep crawl, no sitemap traversal.
- * Fetches only: homepage, /investor, /ir, /investor-relations, robots.txt, sitemap.xml.
- * Max 5 requests per domain, 8s timeout each. Same CrawlResult shape for the UI.
+ * Fetches only: homepage, /investor, /ir, robots.txt, sitemap.xml.
+ * All 5 requests per domain run in parallel so total time fits within serverless limits (e.g. 10s).
  */
 
 import * as cheerio from "cheerio";
@@ -9,7 +9,7 @@ import { getOrigin } from "./url-utils";
 import type { RobotsResult } from "./robots";
 import type { SitemapResult } from "./sitemap";
 
-const FETCH_TIMEOUT_MS = 8000;
+const FETCH_TIMEOUT_MS = 5000;
 const MAX_REQUESTS_PER_DOMAIN = 5;
 const USER_AGENT = "IR-AI-Readiness-Scanner/1.0";
 
@@ -186,9 +186,14 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
   const urlsFromCrawl: string[] = [];
   const irUrlsFromCrawl: string[] = [];
 
-  for (const { url, acceptHtmlOnly } of urlsToFetch) {
-    const { status, contentType, body, responseTimeMs, lastModified } = await fetchOne(url, acceptHtmlOnly);
+  // Fetch all URLs in parallel so total time ~= single slow request (~5s), not 5× sequential
+  const results = await Promise.all(
+    urlsToFetch.map(({ url, acceptHtmlOnly }) =>
+      fetchOne(url, acceptHtmlOnly).then((r) => ({ url, acceptHtmlOnly, ...r }))
+    )
+  );
 
+  for (const { url, acceptHtmlOnly, status, contentType, body, responseTimeMs, lastModified } of results) {
     if (url.endsWith("/robots.txt")) {
       if (status === 200 && body) {
         robots.reachable = true;
