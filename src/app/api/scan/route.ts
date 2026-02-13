@@ -1,7 +1,8 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 import { NextRequest, NextResponse } from "next/server";
-import { crawlDomain } from "@/lib/crawler";
-import { analyzeDomain } from "@/lib/analyze";
-import { prisma } from "@/lib/db";
+
 
 const CACHE_DAYS = 7;
 
@@ -22,6 +23,13 @@ function normalizeDomainInput(input: string): string {
 
 export async function POST(request: NextRequest) {
   try {
+    // Lazy-load server-only deps so Next build doesn't execute them while "collecting page data"
+    const [{ prisma }, { crawlDomain }, { analyzeDomain }] = await Promise.all([
+      import("@/lib/db"),
+      import("@/lib/crawler"),
+      import("@/lib/analyze"),
+    ]);
+
     const body = await request.json();
     const domainA = normalizeDomainInput(body.domainA ?? "");
     const domainB = normalizeDomainInput(body.domainB ?? "");
@@ -40,10 +48,7 @@ export async function POST(request: NextRequest) {
       where: {
         status: "completed",
         finishedAt: { not: null, gte: cacheCutoff },
-        OR: [
-          { domainA, domainB },
-          { domainA: domainB, domainB: domainA },
-        ],
+        OR: [{ domainA, domainB }, { domainA: domainB, domainB: domainA }],
       },
       orderBy: { finishedAt: "desc" },
     });
