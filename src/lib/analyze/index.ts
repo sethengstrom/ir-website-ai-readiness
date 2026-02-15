@@ -35,7 +35,8 @@ export function analyzeDomain(result: CrawlResult): DomainResult {
     ...responseMetrics.findings,
   ];
 
-  const weights = {
+  // Overall AI Readiness: category blend (still shown as secondary). Adjust weights if rebalancing.
+  const overallWeights = {
     crawlability: 0.2,
     structuredData: 0.2,
     parseability: 0.2,
@@ -43,13 +44,14 @@ export function analyzeDomain(result: CrawlResult): DomainResult {
     irChecklist: 0.25,
   };
   const overallScore = Math.round(
-    categoryScores.crawlability * weights.crawlability +
-      categoryScores.structuredData * weights.structuredData +
-      categoryScores.parseability * weights.parseability +
-      categoryScores.freshness * weights.freshness +
-      categoryScores.irChecklist * weights.irChecklist
+    categoryScores.crawlability * overallWeights.crawlability +
+      categoryScores.structuredData * overallWeights.structuredData +
+      categoryScores.parseability * overallWeights.parseability +
+      categoryScores.freshness * overallWeights.freshness +
+      categoryScores.irChecklist * overallWeights.irChecklist
   );
 
+  // AI Citation Readiness (primary): 70% question coverage, 20% crawl/parse, 10% structured data.
   const investorQuestionCoverage = analyzeInvestorQuestionCoverage(result.pages);
   const aiCitationReadiness = Math.round(
     investorQuestionCoverage.coverageScore * 0.7 +

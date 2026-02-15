@@ -1,5 +1,5 @@
 /**
- * Investor Question Coverage: tests ~10 common investor questions against fetched pages
+ * Investor Question Coverage: tests ~20 common investor questions against fetched pages
  * to score "AI answerability" (citation likelihood). Deterministic, regex/heuristic only.
  */
 
@@ -7,7 +7,7 @@ import * as cheerio from "cheerio";
 import type { CrawlPage } from "../crawler";
 import type { InvestorQuestionCoverage, InvestorQuestionResult, InvestorQuestionStatus } from "../types";
 
-const QUESTION_COUNT = 10;
+const QUESTION_COUNT = 20;
 
 /** Fixed set of common investor questions (ids used for stable ordering). */
 const INVESTOR_QUESTIONS: { id: string; question: string }[] = [
@@ -21,6 +21,16 @@ const INVESTOR_QUESTIONS: { id: string; question: string }[] = [
   { id: "ir_contact", question: "How do I contact investor relations?" },
   { id: "fiscal_year", question: "What is the company's fiscal year end?" },
   { id: "dividend", question: "When was the last dividend declared or what is the dividend policy?" },
+  { id: "annual_report", question: "Where is the annual report or 10-K?" },
+  { id: "stock_quote", question: "What is the stock ticker or where can I get a stock quote?" },
+  { id: "analyst_coverage", question: "Where is analyst coverage or analyst estimates?" },
+  { id: "esg_sustainability", question: "Where is the ESG or sustainability report?" },
+  { id: "board_leadership", question: "Who is on the board of directors or leadership team?" },
+  { id: "press_releases", question: "Where are press releases or news?" },
+  { id: "events_calendar", question: "Where is the events calendar or list of upcoming events?" },
+  { id: "guidance_outlook", question: "What is management's guidance or financial outlook?" },
+  { id: "share_repurchase", question: "What is the share repurchase or buyback program?" },
+  { id: "debt_credit_rating", question: "What is the company's debt or credit rating?" },
 ];
 
 /** Get visible text and hrefs from a page (deterministic). */
@@ -61,6 +71,16 @@ const SEC_LINK = /sec\.gov|edgar|10-?[kq]|filings?|sec\s+filing/i;
 const IR_CONTACT = /investor\s+relations?|ir@|contact\s+investor|investor\s+contact|investors?@[\w.-]+\.(?:com|org)/i;
 const FISCAL_YEAR = /fiscal\s+year\s+end|fye|fiscal\s+year\s+(?:ended?|ending)|(?:january|february|…|december)\s+\d{1,2},?\s+\d{4}\s+\(?fiscal/i;
 const DIVIDEND = /dividend|dividend\s+policy|declared\s+(?:a\s+)?dividend|per\s+share\s+dividend/i;
+const ANNUAL_REPORT = /annual\s+report|10-?k|10-k|form\s+10k/i;
+const STOCK_QUOTE = /stock\s+quote|ticker|ticker\s+symbol|share\s+price|nasdaq|nyse|symbol\s*:?\s*[A-Z]{1,5}\b/i;
+const ANALYST = /analyst\s+coverage|analyst\s+estimates|consensus|price\s+target|ratings?\s+from/i;
+const ESG = /esg|sustainability|sustainable|corporate\s+responsibility|climate|carbon/i;
+const BOARD_LEADERSHIP = /board\s+of\s+directors|board\s+members|leadership|management\s+team|executive\s+team|ceo|cfo/i;
+const PRESS_NEWS = /press\s+release|news\s+release|newsroom|latest\s+news|announcements?/i;
+const EVENTS_CALENDAR = /events?\s+calendar|upcoming\s+events?|event\s+schedule|calendar\s+of\s+events/i;
+const GUIDANCE = /guidance|outlook|forward\s+looking|forecast|expected\s+(?:revenue|earnings)/i;
+const BUYBACK = /share\s+repurchase|buyback|repurchase\s+program|authorized\s+repurchase/i;
+const DEBT_RATING = /credit\s+rating|debt\s+rating|moody's|s&p|fitch|investment\s+grade|borrowing/i;
 
 function findSnippet(text: string, pattern: RegExp, maxLen = 120): string | undefined {
   const m = text.match(pattern);
@@ -187,6 +207,102 @@ function testQuestion(
         const snip = findSnippet(text, DIVIDEND);
         if (hasDiv) {
           best = { status: "answerable", explanation: "Dividend or policy mentioned.", sourceUrl: page.url, evidenceSnippet: snip };
+          return { id, question, ...best };
+        }
+        break;
+      }
+      case "annual_report": {
+        const linkMatch = links.some((l) => ANNUAL_REPORT.test(l.href + " " + l.text));
+        const textMatch = ANNUAL_REPORT.test(combined);
+        if (linkMatch) {
+          best = { status: "answerable", explanation: "Annual report or 10-K link found.", sourceUrl: page.url };
+          return { id, question, ...best };
+        }
+        if (textMatch) best = { status: "partial", explanation: "Annual report mentioned but no direct link.", sourceUrl: page.url };
+        break;
+      }
+      case "stock_quote": {
+        const hasTicker = STOCK_QUOTE.test(text) || links.some((l) => /stock\s+quote|ticker|symbol/i.test(l.text + l.href));
+        const snip = findSnippet(text, STOCK_QUOTE);
+        if (hasTicker) {
+          best = { status: "answerable", explanation: "Stock ticker or quote info found.", sourceUrl: page.url, evidenceSnippet: snip };
+          return { id, question, ...best };
+        }
+        break;
+      }
+      case "analyst_coverage": {
+        const hasAnalyst = ANALYST.test(text) || links.some((l) => ANALYST.test(l.text + l.href));
+        const snip = findSnippet(text, ANALYST);
+        if (hasAnalyst) {
+          best = { status: "answerable", explanation: "Analyst coverage or estimates mentioned.", sourceUrl: page.url, evidenceSnippet: snip };
+          return { id, question, ...best };
+        }
+        break;
+      }
+      case "esg_sustainability": {
+        const linkMatch = links.some((l) => ESG.test(l.href + " " + l.text));
+        const textMatch = ESG.test(text);
+        if (linkMatch) {
+          best = { status: "answerable", explanation: "ESG or sustainability link found.", sourceUrl: page.url };
+          return { id, question, ...best };
+        }
+        if (textMatch) best = { status: "partial", explanation: "ESG/sustainability mentioned but no direct link.", sourceUrl: page.url };
+        break;
+      }
+      case "board_leadership": {
+        const hasBoard = BOARD_LEADERSHIP.test(text) || links.some((l) => BOARD_LEADERSHIP.test(l.text + l.href));
+        const snip = findSnippet(text, BOARD_LEADERSHIP);
+        if (hasBoard) {
+          best = { status: "answerable", explanation: "Board or leadership info found.", sourceUrl: page.url, evidenceSnippet: snip };
+          return { id, question, ...best };
+        }
+        break;
+      }
+      case "press_releases": {
+        const linkMatch = links.some((l) => PRESS_NEWS.test(l.href + " " + l.text));
+        const textMatch = PRESS_NEWS.test(text);
+        if (linkMatch) {
+          best = { status: "answerable", explanation: "Press releases or newsroom link found.", sourceUrl: page.url };
+          return { id, question, ...best };
+        }
+        if (textMatch) best = { status: "partial", explanation: "Press/news mentioned but no direct link.", sourceUrl: page.url };
+        break;
+      }
+      case "events_calendar": {
+        const linkMatch = links.some((l) => EVENTS_CALENDAR.test(l.href + " " + l.text));
+        const textMatch = EVENTS_CALENDAR.test(text);
+        if (linkMatch || textMatch) {
+          best = { status: "answerable", explanation: "Events calendar or upcoming events found.", sourceUrl: page.url };
+          return { id, question, ...best };
+        }
+        if (/\bupcoming\s+events?\b|\bevents?\s+and\s+presentations\b/i.test(text)) {
+          best = { status: "partial", explanation: "Events section mentioned but no calendar link.", sourceUrl: page.url };
+        }
+        break;
+      }
+      case "guidance_outlook": {
+        const hasGuidance = GUIDANCE.test(text);
+        const snip = findSnippet(text, GUIDANCE);
+        if (hasGuidance) {
+          best = { status: "answerable", explanation: "Guidance or outlook mentioned.", sourceUrl: page.url, evidenceSnippet: snip };
+          return { id, question, ...best };
+        }
+        break;
+      }
+      case "share_repurchase": {
+        const hasBuyback = BUYBACK.test(text);
+        const snip = findSnippet(text, BUYBACK);
+        if (hasBuyback) {
+          best = { status: "answerable", explanation: "Share repurchase or buyback mentioned.", sourceUrl: page.url, evidenceSnippet: snip };
+          return { id, question, ...best };
+        }
+        break;
+      }
+      case "debt_credit_rating": {
+        const hasRating = DEBT_RATING.test(text);
+        const snip = findSnippet(text, DEBT_RATING);
+        if (hasRating) {
+          best = { status: "answerable", explanation: "Debt or credit rating mentioned.", sourceUrl: page.url, evidenceSnippet: snip };
           return { id, question, ...best };
         }
         break;
