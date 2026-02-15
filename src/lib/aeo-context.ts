@@ -250,3 +250,31 @@ export function getCriteriaStatusForDomain(
     return { improvement, passed: !anyFailed };
   });
 }
+
+export type FindingCriterion = { label: string; passed: boolean; improvement?: string };
+
+/**
+ * Returns each finding in this category as its own criterion with pass/fail.
+ * This aligns the criteria list with the actual checks that drive the score, so ✓/✗ count matches the score.
+ * Optional improvement hint is added for failed findings when a trigger matches.
+ */
+export function getCategoryFindingsForDomain(
+  categoryKey: string,
+  findings: { category: string; subcategory?: string; signal: string; passed: boolean }[]
+): FindingCriterion[] {
+  const relevant = findings
+    .filter((f) => findingCategoryToKey(f.category) === categoryKey)
+    .map((f) => {
+      let improvement: string | undefined;
+      if (!f.passed) {
+        const triggers = IMPROVEMENT_TRIGGERS[categoryKey];
+        const combined = ((f.subcategory ?? "") + " " + f.signal).toLowerCase();
+        const match = triggers?.find(({ triggers: t }) =>
+          t.some((trigger) => combined.includes(trigger.toLowerCase()))
+        );
+        if (match) improvement = match.improvement;
+      }
+      return { label: f.signal, passed: f.passed, improvement };
+    });
+  return relevant;
+}

@@ -10,7 +10,7 @@ import type {
   InvestorQuestionResult,
   InvestorQuestionStatus,
 } from "@/lib/types";
-import { AEO_INTRO, CATEGORY_CONTEXT, getFindingWhyItMatters, getCriteriaStatusForDomain } from "@/lib/aeo-context";
+import { AEO_INTRO, CATEGORY_CONTEXT, getFindingWhyItMatters, getCategoryFindingsForDomain } from "@/lib/aeo-context";
 
 async function runScan(domainA: string, domainB: string): Promise<{
   runId: string;
@@ -89,8 +89,8 @@ function CategoryRows({
           key === "structuredData" && resultB.structuredDataBreakdown != null
             ? resultB.structuredDataBreakdown.structuredDataScore
             : (resultB.categoryScores[key] ?? 0);
-        const criteriaA = getCriteriaStatusForDomain(key, resultA.findings ?? []);
-        const criteriaB = getCriteriaStatusForDomain(key, resultB.findings ?? []);
+        const criteriaA = getCategoryFindingsForDomain(key, resultA.findings ?? []);
+        const criteriaB = getCategoryFindingsForDomain(key, resultB.findings ?? []);
         const hasCriteria = criteriaA.length > 0 || criteriaB.length > 0;
         const isOpen = openImprovements.has(key);
         return (
@@ -130,18 +130,21 @@ function CategoryRows({
                       <div>
                         <p className="text-xs font-medium text-zinc-500 mb-0.5">Domain A</p>
                         <ul className="text-xs text-zinc-400 space-y-1 list-none">
-                          {criteriaA.map(({ improvement, passed }, i) => (
+                          {criteriaA.map(({ label, passed, improvement }, i) => (
                             <li key={i} className="flex gap-1.5 items-start">
                               <span className="shrink-0 mt-0.5" aria-hidden>
-                                {passed === true ? (
+                                {passed ? (
                                   <span className="text-emerald-400" title="Passed">✓</span>
-                                ) : passed === false ? (
-                                  <span className="text-red-400" title="Failed">✗</span>
                                 ) : (
-                                  <span className="text-zinc-500" title="Not assessed">—</span>
+                                  <span className="text-red-400" title="Failed">✗</span>
                                 )}
                               </span>
-                              <span className={passed === false ? "text-zinc-300" : undefined}>{improvement}</span>
+                              <span className="min-w-0">
+                                <span className={passed ? undefined : "text-zinc-300"}>{label}</span>
+                                {!passed && improvement && (
+                                  <span className="block text-zinc-500 mt-0.5 italic">How to improve: {improvement}</span>
+                                )}
+                              </span>
                             </li>
                           ))}
                         </ul>
@@ -149,18 +152,21 @@ function CategoryRows({
                       <div>
                         <p className="text-xs font-medium text-zinc-500 mb-0.5">Domain B</p>
                         <ul className="text-xs text-zinc-400 space-y-1 list-none">
-                          {criteriaB.map(({ improvement, passed }, i) => (
+                          {criteriaB.map(({ label, passed, improvement }, i) => (
                             <li key={i} className="flex gap-1.5 items-start">
                               <span className="shrink-0 mt-0.5" aria-hidden>
-                                {passed === true ? (
+                                {passed ? (
                                   <span className="text-emerald-400" title="Passed">✓</span>
-                                ) : passed === false ? (
-                                  <span className="text-red-400" title="Failed">✗</span>
                                 ) : (
-                                  <span className="text-zinc-500" title="Not assessed">—</span>
+                                  <span className="text-red-400" title="Failed">✗</span>
                                 )}
                               </span>
-                              <span className={passed === false ? "text-zinc-300" : undefined}>{improvement}</span>
+                              <span className="min-w-0">
+                                <span className={passed ? undefined : "text-zinc-300"}>{label}</span>
+                                {!passed && improvement && (
+                                  <span className="block text-zinc-500 mt-0.5 italic">How to improve: {improvement}</span>
+                                )}
+                              </span>
                             </li>
                           ))}
                         </ul>
