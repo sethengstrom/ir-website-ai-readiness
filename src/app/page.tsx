@@ -125,7 +125,7 @@ function CategoryRows({
                     How to improve
                   </button>
                   {isOpen && (
-                    <div className="mt-1 space-y-3">
+                    <div className="mt-1 grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-xs font-medium text-zinc-500 mb-0.5">Domain A</p>
                         <ul className="text-xs text-zinc-400 space-y-0.5 list-disc list-inside">
@@ -548,15 +548,17 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#0f0f12] text-zinc-200">
-      <header className="border-b border-zinc-800 px-4 py-6">
-        <h1 className="text-2xl font-bold text-white">IR AI Readiness Scanner</h1>
-        <p className="text-zinc-500 text-sm mt-1">
-          Compare two domains for investor relations AI/agent retrieval signals
-        </p>
-        <div className="mt-4 p-4 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm">
-          <h2 className="font-semibold text-zinc-200 mb-1">{AEO_INTRO.title}</h2>
-          <p className="text-zinc-400 mb-2">{AEO_INTRO.body}</p>
-          <p className="text-zinc-500 text-xs">{AEO_INTRO.scoreMeaning}</p>
+      <header className="border-b border-zinc-800 py-6">
+        <div className="max-w-7xl mx-auto px-4">
+          <h1 className="text-2xl font-bold text-white">IR AI Readiness Scanner</h1>
+          <p className="text-zinc-500 text-sm mt-1">
+            Compare two domains for investor relations AI/agent retrieval signals
+          </p>
+          <div className="mt-4 p-4 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm">
+            <h2 className="font-semibold text-zinc-200 mb-1">{AEO_INTRO.title}</h2>
+            <p className="text-zinc-400 mb-2">{AEO_INTRO.body}</p>
+            <p className="text-zinc-500 text-xs">{AEO_INTRO.scoreMeaning}</p>
+          </div>
         </div>
       </header>
 
