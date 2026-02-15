@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useEffect, useRef, Fragment } from "react";
 import type {
   DomainResult,
@@ -8,7 +9,7 @@ import type {
   InvestorQuestionResult,
   InvestorQuestionStatus,
 } from "@/lib/types";
-import { AEO_INTRO, CATEGORY_CONTEXT, getFindingWhyItMatters } from "@/lib/aeo-context";
+import { AEO_INTRO, CATEGORY_CONTEXT, getFindingWhyItMatters, getImprovementsForDomain } from "@/lib/aeo-context";
 
 async function runScan(domainA: string, domainB: string): Promise<{
   runId: string;
@@ -87,6 +88,8 @@ function CategoryRows({
           key === "structuredData" && resultB.structuredDataBreakdown != null
             ? resultB.structuredDataBreakdown.structuredDataScore
             : (resultB.categoryScores[key] ?? 0);
+        const improvementsA = getImprovementsForDomain(key, resultA.findings ?? []);
+        const improvementsB = getImprovementsForDomain(key, resultB.findings ?? []);
         const hasImprovements = (ctx.improvements?.length ?? 0) > 0;
         const isOpen = openImprovements.has(key);
         return (
@@ -122,11 +125,24 @@ function CategoryRows({
                     How to improve
                   </button>
                   {isOpen && (
-                    <ul className="text-xs text-zinc-400 space-y-0.5 list-disc list-inside mt-1">
-                      {ctx.improvements!.map((item, i) => (
-                        <li key={i}>{item}</li>
-                      ))}
-                    </ul>
+                    <div className="mt-1 space-y-3">
+                      <div>
+                        <p className="text-xs font-medium text-zinc-500 mb-0.5">Domain A</p>
+                        <ul className="text-xs text-zinc-400 space-y-0.5 list-disc list-inside">
+                          {improvementsA.map((item, i) => (
+                            <li key={i}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-zinc-500 mb-0.5">Domain B</p>
+                        <ul className="text-xs text-zinc-400 space-y-0.5 list-disc list-inside">
+                          {improvementsB.map((item, i) => (
+                            <li key={i}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
@@ -689,6 +705,18 @@ export default function Home() {
             stored in the database.
           </p>
         )}
+
+        <footer className="mt-10 pt-6 border-t border-zinc-800">
+          <Link
+            href="/methodology"
+            className="text-sm text-emerald-400 hover:text-emerald-300 underline focus:outline-none focus:ring-2 focus:ring-emerald-500/50 rounded"
+          >
+            Scoring methodology
+          </Link>
+          <p className="text-zinc-500 text-xs mt-1">
+            How we calculate AI Citation Readiness, category scores, and investor question coverage.
+          </p>
+        </footer>
       </main>
     </div>
   );

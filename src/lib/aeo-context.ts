@@ -135,3 +135,90 @@ export function getFindingWhyItMatters(category: string, subcategory?: string): 
   if (c === "irchecklist") return FINDING_WHY["irchecklist|checklist"];
   return "This signal helps answer engines and AI agents discover and use your IR content.";
 }
+
+/** Map finding category (from analyzer) to CATEGORY_CONTEXT key. */
+function findingCategoryToKey(category: string): string {
+  const c = category.toLowerCase().replace(/\s+/g, "");
+  if (c === "crawlability") return "crawlability";
+  if (c === "structureddata") return "structuredData";
+  if (c === "parseability") return "parseability";
+  if (c === "freshness") return "freshness";
+  if (c === "ircompleteness") return "irChecklist";
+  return c;
+}
+
+/**
+ * Per-category triggers: when a failed finding's subcategory or signal matches a trigger,
+ * we include the corresponding improvement for that domain.
+ */
+const IMPROVEMENT_TRIGGERS: Record<
+  string,
+  { triggers: string[]; improvement: string }[]
+> = {
+  crawlability: [
+    { triggers: ["robots", "disallow", "reachable"], improvement: "Ensure robots.txt is reachable and does not Disallow: /investors or /investor-relations." },
+    { triggers: ["sitemap"], improvement: "Publish a sitemap (e.g. sitemap.xml) and reference it in robots.txt or at the root." },
+    { triggers: ["crawl", "url", "IR-related"], improvement: "Use clear IR paths (e.g. /investor, /investors, /ir) so crawlers and the sitemap can discover them." },
+  ],
+  structuredData: [
+    { triggers: ["feed", "rss", "atom"], improvement: "Add at least one RSS or Atom feed for IR content and link it with <link rel=\"alternate\" type=\"application/rss+xml\" … />." },
+    { triggers: ["Organization", "Corporation", "identity"], improvement: "Use Organization or Corporation JSON-LD with name and url (or logo); add tickerSymbol for the stock ticker." },
+    { triggers: ["datePublished", "dateModified", "dates"], improvement: "Add datePublished and dateModified in JSON-LD (e.g. on WebPage or NewsArticle) so AI can cite dates." },
+    { triggers: ["BreadcrumbList", "breadcrumb"], improvement: "Add BreadcrumbList JSON-LD on key IR pages." },
+    { triggers: ["No JSON-LD", "Schema types"], improvement: "Use multiple relevant schema types (e.g. NewsArticle, Event, FAQPage) where they fit the content." },
+  ],
+  parseability: [
+    { triggers: ["length", "chars", "content", "ratio"], improvement: "Serve meaningful, server-rendered main content (e.g. in <main>) with at least ~500 characters of text." },
+    { triggers: ["H1", "H2", "heading"], improvement: "Use one H1 and at least one H2 per page so structure is clear." },
+    { triggers: ["canonical"], improvement: "Add <link rel=\"canonical\" href=\"…\" /> on key IR pages." },
+    { triggers: ["Title", "Meta", "description"], improvement: "Include unique <title> and meta name=\"description\" on every page." },
+  ],
+  freshness: [
+    { triggers: ["earnings", "hub", "results"], improvement: "Add a clear earnings or financial results hub (page or section with terms like earnings, results, quarter, webcast)." },
+    { triggers: ["dates", "pages with dates"], improvement: "Show visible dates (e.g. YYYY-MM-DD) on press releases and event pages." },
+    { triggers: ["archive", "releases", "events"], improvement: "Provide archive or all releases / past events pages (URLs containing archive, releases, or events)." },
+  ],
+  irChecklist: [
+    { triggers: ["Filings", "SEC", "EDGAR"], improvement: "Link to SEC/EDGAR, SEDAR+, or a clear filings / financial reports page." },
+    { triggers: ["presentation", "deck"], improvement: "Link to an investor presentation or investor deck." },
+    { triggers: ["press", "release", "newsroom"], improvement: "Link to press releases, newsroom, or announcements." },
+    { triggers: ["event", "webcast"], improvement: "Link to events, webcasts, or earnings call info." },
+    { triggers: ["contact", "IR contact"], improvement: "Provide visible IR contact (e.g. investor relations, IR@ email)." },
+    { triggers: ["governance", "ESG"], improvement: "Link to governance, ESG, sustainability, or board information." },
+  ],
+};
+
+/**
+ * Returns improvement suggestions for a given category based on this domain's failed findings.
+ * When a failed finding matches a trigger, we include that improvement; otherwise we fall back to the full list.
+ */
+export function getImprovementsForDomain(
+  categoryKey: string,
+  findings: { category: string; subcategory?: string; signal: string; passed: boolean }[]
+): string[] {
+  const ctx = CATEGORY_CONTEXT[categoryKey];
+  const fullList = ctx?.improvements ?? [];
+  const triggers = IMPROVEMENT_TRIGGERS[categoryKey];
+  if (!triggers?.length) return fullList;
+
+  const relevant = findings.filter(
+    (f) => findingCategoryToKey(f.category) === categoryKey && !f.passed
+  );
+  if (relevant.length === 0) return fullList;
+
+  const added = new Set<string>();
+  const out: string[] = [];
+  for (const f of relevant) {
+    const combined = ((f.subcategory ?? "") + " " + f.signal).toLowerCase();
+    for (const { triggers: t, improvement } of triggers) {
+      if (t.some((trigger) => combined.includes(trigger.toLowerCase()))) {
+        if (!added.has(improvement)) {
+          added.add(improvement);
+          out.push(improvement);
+        }
+        break;
+      }
+    }
+  }
+  return out.length > 0 ? out : fullList;
+}
