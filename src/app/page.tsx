@@ -491,9 +491,10 @@ export default function Home() {
 
         {!result && !loading && (
           <p className="text-zinc-500 text-sm">
-            Enter two domains and click Compare. Each site is crawled (sitemap-first, then shallow
-            crawl), then analyzed for crawlability, structured data, parseability, freshness, and IR
-            completeness. Results are stored locally in SQLite.
+            Enter two domains and click Compare. Each site is checked by fetching the homepage,
+            IR paths (/investor, /ir), robots.txt, and sitemap (no deep crawl), then analyzed for
+            crawlability, structured data, parseability, freshness, and IR completeness. Results are
+            stored in the database.
           </p>
         )}
       </main>
