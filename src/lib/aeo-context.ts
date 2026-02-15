@@ -222,3 +222,31 @@ export function getImprovementsForDomain(
   }
   return out.length > 0 ? out : fullList;
 }
+
+export type CriteriaStatus = { improvement: string; passed: boolean | null };
+
+/**
+ * Returns all criteria for a category with pass/fail for this domain.
+ * passed: true = at least one matching finding passed and none failed; false = at least one failed; null = no matching finding.
+ */
+export function getCriteriaStatusForDomain(
+  categoryKey: string,
+  findings: { category: string; subcategory?: string; signal: string; passed: boolean }[]
+): CriteriaStatus[] {
+  const triggers = IMPROVEMENT_TRIGGERS[categoryKey];
+  if (!triggers?.length) return [];
+
+  const relevant = findings.filter(
+    (f) => findingCategoryToKey(f.category) === categoryKey
+  );
+
+  return triggers.map(({ triggers: t, improvement }) => {
+    const matching = relevant.filter((f) => {
+      const combined = ((f.subcategory ?? "") + " " + f.signal).toLowerCase();
+      return t.some((trigger) => combined.includes(trigger.toLowerCase()));
+    });
+    if (matching.length === 0) return { improvement, passed: null };
+    const anyFailed = matching.some((m) => !m.passed);
+    return { improvement, passed: !anyFailed };
+  });
+}

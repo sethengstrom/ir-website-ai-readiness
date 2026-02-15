@@ -10,7 +10,7 @@ import type {
   InvestorQuestionResult,
   InvestorQuestionStatus,
 } from "@/lib/types";
-import { AEO_INTRO, CATEGORY_CONTEXT, getFindingWhyItMatters, getImprovementsForDomain } from "@/lib/aeo-context";
+import { AEO_INTRO, CATEGORY_CONTEXT, getFindingWhyItMatters, getCriteriaStatusForDomain } from "@/lib/aeo-context";
 
 async function runScan(domainA: string, domainB: string): Promise<{
   runId: string;
@@ -89,9 +89,9 @@ function CategoryRows({
           key === "structuredData" && resultB.structuredDataBreakdown != null
             ? resultB.structuredDataBreakdown.structuredDataScore
             : (resultB.categoryScores[key] ?? 0);
-        const improvementsA = getImprovementsForDomain(key, resultA.findings ?? []);
-        const improvementsB = getImprovementsForDomain(key, resultB.findings ?? []);
-        const hasImprovements = (ctx.improvements?.length ?? 0) > 0;
+        const criteriaA = getCriteriaStatusForDomain(key, resultA.findings ?? []);
+        const criteriaB = getCriteriaStatusForDomain(key, resultB.findings ?? []);
+        const hasCriteria = criteriaA.length > 0 || criteriaB.length > 0;
         const isOpen = openImprovements.has(key);
         return (
           <div
@@ -114,7 +114,7 @@ function CategoryRows({
                   <span className="font-medium text-zinc-500">This row:</span> Structured Data Score (JSON-LD only). Overall AI Readiness above uses category score that includes feeds.
                 </p>
               )}
-              {hasImprovements && (
+              {hasCriteria && (
                 <div className="mt-2">
                   <button
                     type="button"
@@ -123,23 +123,45 @@ function CategoryRows({
                     aria-expanded={isOpen}
                   >
                     <span className="text-zinc-500" aria-hidden>{isOpen ? "▼" : "▶"}</span>
-                    How to improve
+                    Criteria (pass / fail by domain)
                   </button>
                   {isOpen && (
                     <div className="mt-1 grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-xs font-medium text-zinc-500 mb-0.5">Domain A</p>
-                        <ul className="text-xs text-zinc-400 space-y-0.5 list-disc list-inside">
-                          {improvementsA.map((item, i) => (
-                            <li key={i}>{item}</li>
+                        <ul className="text-xs text-zinc-400 space-y-1 list-none">
+                          {criteriaA.map(({ improvement, passed }, i) => (
+                            <li key={i} className="flex gap-1.5 items-start">
+                              <span className="shrink-0 mt-0.5" aria-hidden>
+                                {passed === true ? (
+                                  <span className="text-emerald-400" title="Passed">✓</span>
+                                ) : passed === false ? (
+                                  <span className="text-red-400" title="Failed">✗</span>
+                                ) : (
+                                  <span className="text-zinc-500" title="Not assessed">—</span>
+                                )}
+                              </span>
+                              <span className={passed === false ? "text-zinc-300" : undefined}>{improvement}</span>
+                            </li>
                           ))}
                         </ul>
                       </div>
                       <div>
                         <p className="text-xs font-medium text-zinc-500 mb-0.5">Domain B</p>
-                        <ul className="text-xs text-zinc-400 space-y-0.5 list-disc list-inside">
-                          {improvementsB.map((item, i) => (
-                            <li key={i}>{item}</li>
+                        <ul className="text-xs text-zinc-400 space-y-1 list-none">
+                          {criteriaB.map(({ improvement, passed }, i) => (
+                            <li key={i} className="flex gap-1.5 items-start">
+                              <span className="shrink-0 mt-0.5" aria-hidden>
+                                {passed === true ? (
+                                  <span className="text-emerald-400" title="Passed">✓</span>
+                                ) : passed === false ? (
+                                  <span className="text-red-400" title="Failed">✗</span>
+                                ) : (
+                                  <span className="text-zinc-500" title="Not assessed">—</span>
+                                )}
+                              </span>
+                              <span className={passed === false ? "text-zinc-300" : undefined}>{improvement}</span>
+                            </li>
                           ))}
                         </ul>
                       </div>
