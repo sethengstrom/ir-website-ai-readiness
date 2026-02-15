@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useState, useEffect, useRef, Fragment } from "react";
+import { useState, useEffect, useRef, Fragment, Suspense } from "react";
 import type {
   DomainResult,
   Finding,
@@ -468,7 +468,7 @@ function FindingsTable({ findings, domainLabel }: { findings: Finding[]; domainL
   );
 }
 
-export default function Home() {
+function HomeContent() {
   const searchParams = useSearchParams();
   const [domainA, setDomainA] = useState("https://investor.ciena.com/");
   const [domainB, setDomainB] = useState("https://investor.workday.com");
@@ -729,5 +729,19 @@ export default function Home() {
         </footer>
       </main>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#0f0f12] flex items-center justify-center text-zinc-400">
+          Loading…
+        </div>
+      }
+    >
+      <HomeContent />
+    </Suspense>
   );
 }
