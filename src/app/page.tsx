@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, Fragment } from "react";
-import type { DomainResult, Finding } from "@/lib/types";
+import type { DomainResult, Finding, StructuredDataBreakdown } from "@/lib/types";
 import { AEO_INTRO, CATEGORY_CONTEXT, getFindingWhyItMatters } from "@/lib/aeo-context";
 
 async function runScan(domainA: string, domainB: string): Promise<{
@@ -72,8 +72,15 @@ function CategoryRows({
       {CATEGORY_ITEMS.map(({ key, label }) => {
         const ctx = CATEGORY_CONTEXT[key];
         if (!ctx) return null;
-        const scoreA = resultA.categoryScores[key] ?? 0;
-        const scoreB = resultB.categoryScores[key] ?? 0;
+        // Structured data row shows JSON-LD-only score (breakdown); others use category score
+        const scoreA =
+          key === "structuredData" && resultA.structuredDataBreakdown != null
+            ? resultA.structuredDataBreakdown.structuredDataScore
+            : (resultA.categoryScores[key] ?? 0);
+        const scoreB =
+          key === "structuredData" && resultB.structuredDataBreakdown != null
+            ? resultB.structuredDataBreakdown.structuredDataScore
+            : (resultB.categoryScores[key] ?? 0);
         const hasImprovements = (ctx.improvements?.length ?? 0) > 0;
         const isOpen = openImprovements.has(key);
         return (
@@ -92,6 +99,11 @@ function CategoryRows({
               <p className="text-xs text-zinc-500 mt-0.5">
                 <span className="font-medium text-zinc-500">Score:</span> {ctx.scoreMeaning}
               </p>
+              {key === "structuredData" && (
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  <span className="font-medium text-zinc-500">This row:</span> Structured Data Score (JSON-LD only). Overall AI Readiness above uses category score that includes feeds.
+                </p>
+              )}
               {hasImprovements && (
                 <div className="mt-2">
                   <button
@@ -154,14 +166,17 @@ function ResultsByCategory({
             </span>
           </div>
         </div>
-        <div className="flex items-center justify-center gap-6 min-w-[7rem]">
-          <span className={`text-5xl font-bold tabular-nums w-14 text-right ${scoreColorClass(resultA.overallScore)}`}>
-            {resultA.overallScore}
-          </span>
-          <span className="text-zinc-500 text-sm font-medium shrink-0">vs</span>
-          <span className={`text-5xl font-bold tabular-nums w-14 text-left ${scoreColorClass(resultB.overallScore)}`}>
-            {resultB.overallScore}
-          </span>
+        <div className="flex flex-col items-center gap-1 min-w-[7rem]">
+          <span className="text-xs text-zinc-500 font-medium">Overall AI Readiness Score</span>
+          <div className="flex items-center gap-6">
+            <span className={`text-5xl font-bold tabular-nums w-14 text-right ${scoreColorClass(resultA.overallScore)}`}>
+              {resultA.overallScore}
+            </span>
+            <span className="text-zinc-500 text-sm font-medium shrink-0">vs</span>
+            <span className={`text-5xl font-bold tabular-nums w-14 text-left ${scoreColorClass(resultB.overallScore)}`}>
+              {resultB.overallScore}
+            </span>
+          </div>
         </div>
         <div className="flex items-center gap-2 min-w-0 justify-end">
           {resultB.faviconUrl && (
@@ -192,6 +207,47 @@ function ResultsByCategory({
         scoreColorClass={scoreColorClass}
       />
     </section>
+  );
+}
+
+function StructuredDataBreakdownCard({
+  breakdown,
+  domainLabel,
+}: {
+  breakdown: StructuredDataBreakdown | undefined;
+  domainLabel: string;
+}) {
+  if (!breakdown) {
+    return (
+      <div className="rounded-lg border border-zinc-700/60 bg-zinc-800/30 p-4">
+        <h4 className="font-medium text-white text-sm mb-2">{domainLabel}</h4>
+        <p className="text-xs text-zinc-500">No structured data breakdown.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-lg border border-zinc-700/60 bg-zinc-800/30 p-4">
+      <h4 className="font-medium text-white text-sm mb-2">{domainLabel}</h4>
+      <p className="text-xs text-zinc-500 mb-2">
+        <span className="font-medium text-zinc-400">JSON-LD blocks:</span> {breakdown.jsonLdBlockCount}
+      </p>
+      {breakdown.detectedTypes.length > 0 ? (
+        <p className="text-xs text-zinc-500 mb-2">
+          <span className="font-medium text-zinc-400">Detected @type:</span>{" "}
+          <span className="text-zinc-300">{breakdown.detectedTypes.join(", ")}</span>
+        </p>
+      ) : (
+        <p className="text-xs text-zinc-500 mb-2">No schema types detected.</p>
+      )}
+      {breakdown.missingRecommendedTypes.length > 0 ? (
+        <p className="text-xs text-zinc-500">
+          <span className="font-medium text-amber-500/90">Missing recommended:</span>{" "}
+          <span className="text-zinc-400">{breakdown.missingRecommendedTypes.join(", ")}</span>
+        </p>
+      ) : (
+        <p className="text-xs text-emerald-500/90">All recommended IR schema types present.</p>
+      )}
+    </div>
   );
 }
 
@@ -475,6 +531,20 @@ export default function Home() {
               </div>
             )}
             <ResultsByCategory resultA={result.resultA} resultB={result.resultB} />
+
+            <section className="px-4 py-3 border-t border-zinc-700/60">
+              <h3 className="font-medium text-white text-sm mb-3">Structured data breakdown (JSON-LD only)</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <StructuredDataBreakdownCard
+                  breakdown={result.resultA.structuredDataBreakdown}
+                  domainLabel={result.resultA.domain}
+                />
+                <StructuredDataBreakdownCard
+                  breakdown={result.resultB.structuredDataBreakdown}
+                  domainLabel={result.resultB.domain}
+                />
+              </div>
+            </section>
 
             <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <FindingsTable

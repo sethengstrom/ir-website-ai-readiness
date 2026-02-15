@@ -64,5 +64,6 @@ export function analyzeDomain(result: CrawlResult): DomainResult {
     crawledPageCount: result.pages.length,
     irUrlCount: result.irUrlsFromCrawl.length + result.sitemap.irUrlCount,
     faviconUrl: faviconUrl ?? undefined,
+    structuredDataBreakdown: structuredData.breakdown,
   };
 }

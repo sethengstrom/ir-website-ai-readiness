@@ -35,6 +35,18 @@ export interface CategoryScores {
   irChecklist: number;
 }
 
+/** JSON-LD-only structured data readiness (0–100). Separate from overall category score which may include feeds. */
+export interface StructuredDataBreakdown {
+  /** Score from JSON-LD analysis only: presence, valid parse, @context, @type, recommended types, field completeness. */
+  structuredDataScore: number;
+  /** Number of JSON-LD blocks (script tags with valid parse and @type). */
+  jsonLdBlockCount: number;
+  /** All detected @type values across blocks. */
+  detectedTypes: string[];
+  /** Recommended IR schema types not found (Organization/Corporation, WebSite, WebPage, FAQPage, NewsArticle, Event, BreadcrumbList). */
+  missingRecommendedTypes: string[];
+}
+
 export interface DomainResult {
   domain: string;
   origin: string;
@@ -45,4 +57,6 @@ export interface DomainResult {
   irUrlCount: number;
   /** Logo or icon URL from the site (favicon, apple-touch-icon, or Organization logo). */
   faviconUrl?: string;
+  /** Structured data (JSON-LD) breakdown; used to show schema-only score and missing types. */
+  structuredDataBreakdown?: StructuredDataBreakdown;
 }

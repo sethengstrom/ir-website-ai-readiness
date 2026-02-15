@@ -1,6 +1,16 @@
 import * as cheerio from "cheerio";
 import type { CrawlPage } from "../crawler";
-import type { Finding } from "../types";
+import type { Finding, StructuredDataBreakdown } from "../types";
+
+/** IR-recommended schema types for structured data score. Organization/Corporation count as one slot. */
+const RECOMMENDED_IR_TYPES = [
+  "WebSite",
+  "WebPage",
+  "FAQPage",
+  "NewsArticle",
+  "Event",
+  "BreadcrumbList",
+] as const;
 
 const SCHEMA_TYPES_OF_INTEREST = [
   "FAQPage",
@@ -10,6 +20,7 @@ const SCHEMA_TYPES_OF_INTEREST = [
   "Event",
   "Organization",
   "Corporation",
+  "WebSite",
   "WebPage",
   "FinancialReport",
   "Report",
@@ -75,15 +86,24 @@ function flattenJsonLdItems(data: unknown): unknown[] {
   return out;
 }
 
-function extractJsonLdBlocks(html: string): { types: string[]; raw: string; obj: unknown }[] {
+interface JsonLdBlock {
+  types: string[];
+  raw: string;
+  obj: unknown;
+}
+
+function extractJsonLdBlocks(html: string): { blocks: JsonLdBlock[]; hadContext: boolean } {
   const $ = cheerio.load(html);
-  const results: { types: string[]; raw: string; obj: unknown }[] = [];
+  const blocks: JsonLdBlock[] = [];
+  let hadContext = false;
   $('script[type="application/ld+json"]').each((_, el) => {
     const text = $(el).html()?.trim();
     if (!text) return;
     try {
       let data: unknown = JSON.parse(text);
-      // Some sites serve JSON-LD as an escaped string inside the script
+      if (data && typeof data === "object" && (data as Record<string, unknown>)["@context"] != null) {
+        hadContext = true;
+      }
       if (typeof data === "string") {
         try {
           data = JSON.parse(data);
@@ -95,13 +115,33 @@ function extractJsonLdBlocks(html: string): { types: string[]; raw: string; obj:
       items.forEach((item) => {
         if (!item || typeof item !== "object") return;
         const types = getTypes(item as { "@type"?: string | string[] });
-        if (types.length) results.push({ types, raw: text.slice(0, 200), obj: item });
+        if (types.length) blocks.push({ types, raw: text.slice(0, 200), obj: item });
       });
     } catch {
       // ignore invalid JSON-LD
     }
   });
-  return results;
+  return { blocks, hadContext };
+}
+
+/** Collect distinct field names present in schema (name, url, datePublished, headline, description, sameAs, logo). */
+const FIELD_COMPLETENESS_KEYS = ["name", "url", "datePublished", "headline", "description", "sameAs", "logo"] as const;
+
+function countFieldsInObject(obj: unknown, seen: Set<string>): void {
+  if (!obj || typeof obj !== "object") return;
+  const o = obj as Record<string, unknown>;
+  for (const key of FIELD_COMPLETENESS_KEYS) {
+    if (o[key] != null && (typeof o[key] === "string" ? (o[key] as string).trim() : true)) {
+      seen.add(key);
+    }
+  }
+  for (const v of Object.values(o)) {
+    if (Array.isArray(v)) {
+      v.forEach((item) => countFieldsInObject(item, seen));
+    } else if (typeof v === "object" && v !== null) {
+      countFieldsInObject(v, seen);
+    }
+  }
 }
 
 function detectFeedUrls(html: string, baseOrigin: string): { href: string; type: string }[] {
@@ -127,11 +167,13 @@ const COMMON_FEED_PATHS = ["/feed", "/rss", "/atom", "/news/feed", "/press/feed"
 export function analyzeStructuredData(
   pages: CrawlPage[],
   origin: string
-): { score: number; findings: Finding[] } {
+): { score: number; findings: Finding[]; breakdown: StructuredDataBreakdown } {
   const findings: Finding[] = [];
   const seenTypes = new Set<string>();
   const allSchemaTypes: { type: string; url: string; snippet: string }[] = [];
   const feedUrls = new Set<string>();
+  const fieldsPresent = new Set<string>();
+  let anyHadContext = false;
 
   let hasOrgWithIdentity = false;
   let hasMachineReadableDates = false;
@@ -140,9 +182,11 @@ export function analyzeStructuredData(
   let totalJsonLdBlocks = 0;
 
   for (const page of pages) {
-    const items = extractJsonLdBlocks(page.html);
-    totalJsonLdBlocks += items.length;
-    for (const { types, raw, obj } of items) {
+    const { blocks, hadContext } = extractJsonLdBlocks(page.html);
+    if (hadContext) anyHadContext = true;
+    totalJsonLdBlocks += blocks.length;
+    for (const { types, raw, obj } of blocks) {
+      countFieldsInObject(obj, fieldsPresent);
       for (const t of types) {
         if (!seenTypes.has(t)) {
           seenTypes.add(t);
@@ -164,6 +208,40 @@ export function analyzeStructuredData(
     const feeds = detectFeedUrls(page.html, origin);
     feeds.forEach((f) => feedUrls.add(f.href));
   }
+
+  // --- Structured Data (JSON-LD only) score and breakdown ---
+  const detectedTypes = [...seenTypes].sort();
+  const missingRecommendedTypes: string[] = [];
+  if (!seenTypes.has("Organization") && !seenTypes.has("Corporation")) {
+    missingRecommendedTypes.push("Organization or Corporation");
+  }
+  for (const t of RECOMMENDED_IR_TYPES) {
+    if (!seenTypes.has(t)) missingRecommendedTypes.push(t);
+  }
+
+  let structuredDataScore = 0;
+  if (totalJsonLdBlocks > 0) {
+    structuredDataScore += 15; // presence of ld+json
+    structuredDataScore += 10; // valid parse (we only count parsed blocks)
+    if (anyHadContext) structuredDataScore += 10;
+    structuredDataScore += 10; // @type (we only push blocks with @type)
+    const hasOrgOrCorp = seenTypes.has("Organization") || seenTypes.has("Corporation");
+    let typeCoverage = hasOrgOrCorp ? 5 : 0;
+    for (const t of RECOMMENDED_IR_TYPES) {
+      if (seenTypes.has(t)) typeCoverage += 5;
+    }
+    structuredDataScore += Math.min(35, typeCoverage);
+    const fieldScore = Math.min(20, Math.round((fieldsPresent.size / FIELD_COMPLETENESS_KEYS.length) * 20));
+    structuredDataScore += fieldScore;
+  }
+  structuredDataScore = Math.min(100, structuredDataScore);
+
+  const breakdown: StructuredDataBreakdown = {
+    structuredDataScore,
+    jsonLdBlockCount: totalJsonLdBlocks,
+    detectedTypes,
+    missingRecommendedTypes,
+  };
 
   // Base score from schema types of interest (IR/LLM-relevant)
   const ofInterest = SCHEMA_TYPES_OF_INTEREST.filter((t) => seenTypes.has(t));
@@ -298,5 +376,5 @@ export function analyzeStructuredData(
   });
 
   const score = Math.round(schemaScore * 0.65 + feedScore * 0.35);
-  return { score: Math.min(100, score), findings };
+  return { score: Math.min(100, score), findings, breakdown };
 }
