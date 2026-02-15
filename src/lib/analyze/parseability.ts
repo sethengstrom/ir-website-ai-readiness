@@ -111,7 +111,10 @@ export function analyzeParseability(pages: CrawlPage[]): { score: number; findin
     passed: withCanonical >= 1,
   });
 
-  const avgScore = count > 0 ? totalScore / (count / 3) : 0;
-  const score = Math.round(Math.min(100, avgScore + canonScore) / 2);
-  return { score: Math.min(100, score), findings };
+  // Per-page score is 0–75 (25 each for content length, headings, canonical). Normalize to 0–100.
+  const avgScoreRaw = count > 0 ? totalScore / (count / 3) : 0;
+  const pageScore100 = (avgScoreRaw / 75) * 100;
+  // Combine per-page quality (50%) and canonical coverage (50%) into 0–100.
+  const score = Math.round((pageScore100 + canonScore) / 2);
+  return { score: Math.min(100, Math.max(0, score)), findings };
 }

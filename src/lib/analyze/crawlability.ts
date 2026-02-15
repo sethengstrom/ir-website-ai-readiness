@@ -112,15 +112,18 @@ export function analyzeCrawlability(result: CrawlResult): { score: number; findi
     passed: irInSitemap >= 1,
   });
 
-  // Total URLs found (sitemap + crawl)
-  const totalUrls = result.sitemap.urlCount + result.urlsFromCrawl.length;
+  // IR-related URLs discovered from crawl (contributes to score so criteria match)
+  total += 1;
+  const crawlOk = result.irUrlsFromCrawl.length >= 1;
+  const crawlScore = crawlOk ? 1 : 0;
+  score += crawlScore;
   findings.push({
     category: "Crawlability",
     subcategory: "crawl",
     signal: `Total IR-related URLs from crawl: ${result.irUrlsFromCrawl.length}`,
-    score: Math.min(100, result.irUrlsFromCrawl.length * 10),
+    score: crawlOk ? 100 : Math.min(100, result.irUrlsFromCrawl.length * 10),
     evidence: { snippet: `Crawled ${result.pages.length} pages`, method: "crawl" },
-    passed: result.irUrlsFromCrawl.length >= 1,
+    passed: crawlOk,
   });
 
   const categoryScore = total > 0 ? Math.round((score / total) * 100) : 0;

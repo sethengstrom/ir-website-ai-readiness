@@ -45,6 +45,7 @@ export function analyzeFreshness(pages: CrawlPage[]): { score: number; findings:
   for (const page of pages) {
     const $ = cheerio.load(page.html);
     const text = $("body").text() || "";
+    DATE_REGEX.lastIndex = 0;
     if (DATE_REGEX.test(text)) pagesWithDates++;
     const path = new URL(page.url).pathname.toLowerCase();
     if (path.includes("archive") || path.includes("releases") || path.includes("events"))
