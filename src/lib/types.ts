@@ -75,9 +75,11 @@ export interface InvestorQuestionResult {
   explanation: string;
   sourceUrl?: string;
   evidenceSnippet?: string;
+  /** Page type used for evidence: e.g. homepage, earnings page, filings page, investor page. */
+  pageType?: string;
 }
 
-/** Result of testing ~10 common investor questions against fetched pages. */
+/** Result of testing 12 high-impact investor questions (earnings + IR navigation). */
 export interface InvestorQuestionCoverage {
   questionResults: InvestorQuestionResult[];
   /** 0–100: share of questions answerable (full + 0.5 for partial). */

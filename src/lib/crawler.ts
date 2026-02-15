@@ -1,6 +1,6 @@
 /**
- * Lightweight fetcher: homepage, IR paths (/investor, /ir, /news), robots.txt, sitemap.xml.
- * Max 6 requests per domain, 8s timeout each; parallel for Vercel-safe total time.
+ * Lightweight fetcher: phase 1 = homepage, /investor, robots, sitemap (4); phase 2 = up to 2
+ * earnings-related links discovered from phase 1 HTML. Max 6 requests per domain, 8s timeout each.
  */
 
 import * as cheerio from "cheerio";
@@ -9,8 +9,12 @@ import type { RobotsResult } from "./robots";
 import type { SitemapResult } from "./sitemap";
 
 const FETCH_TIMEOUT_MS = 8000;
-const MAX_REQUESTS_PER_DOMAIN = 6;
+const MAX_PHASE1 = 4;
+const MAX_FOLLOWUP = 2;
 const USER_AGENT = "IR-AI-Readiness-Scanner/1.0";
+
+/** Match anchors/URLs for earnings-related targets (deterministic). */
+const EARNINGS_LINK_PATTERN = /earnings|results|quarterly|q1|q2|q3|q4|fy\d|press-release|release|webcast|replay|transcript|prepared-remarks|financials|quarter/i;
 
 export interface CrawlPage {
   url: string;
@@ -105,6 +109,36 @@ function isIrPath(pathname: string): boolean {
   );
 }
 
+/** Extract earnings-related links from HTML; return absolute URLs same-origin, ranked by relevance (deterministic). */
+function extractEarningsCandidates(html: string, baseOrigin: string): string[] {
+  const $ = cheerio.load(html);
+  const seen = new Set<string>();
+  const scored: { url: string; score: number }[] = [];
+  $("a[href]").each((_, el) => {
+    const href = $(el).attr("href")?.trim();
+    const linkText = ($(el).text() || "").replace(/\s+/g, " ").trim();
+    if (!href || href.startsWith("#") || href.startsWith("javascript:")) return;
+    try {
+      const url = new URL(href, baseOrigin);
+      if (url.origin !== baseOrigin) return;
+      const full = url.href;
+      if (seen.has(full)) return;
+      const combined = (url.pathname + " " + url.search + " " + linkText).toLowerCase();
+      if (!EARNINGS_LINK_PATTERN.test(combined)) return;
+      seen.add(full);
+      let score = 0;
+      if (/earnings|quarterly|results|q[1-4]|financials/i.test(combined)) score += 3;
+      if (/webcast|replay|transcript|press-release|release/i.test(combined)) score += 2;
+      if (/\.pdf|presentation|slide/i.test(combined)) score += 1;
+      scored.push({ url: full, score });
+    } catch {
+      // skip invalid URL
+    }
+  });
+  scored.sort((a, b) => b.score - a.score);
+  return scored.map((s) => s.url).slice(0, 5);
+}
+
 async function fetchOne(
   url: string,
   acceptHtmlOnly: boolean
@@ -156,14 +190,12 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
   }
   const base = origin.replace(/\/$/, "");
 
-  const urlsToFetch: { url: string; acceptHtmlOnly: boolean }[] = [
+  const phase1Urls: { url: string; acceptHtmlOnly: boolean }[] = [
     { url: `${base}/`, acceptHtmlOnly: true },
     { url: `${base}/robots.txt`, acceptHtmlOnly: false },
     { url: `${base}/sitemap.xml`, acceptHtmlOnly: false },
     { url: `${base}/investor`, acceptHtmlOnly: true },
-    { url: `${base}/ir`, acceptHtmlOnly: true },
-    { url: `${base}/news`, acceptHtmlOnly: true },
-  ].slice(0, MAX_REQUESTS_PER_DOMAIN);
+  ].slice(0, MAX_PHASE1);
 
   const robots: RobotsResult = {
     reachable: false,
@@ -185,15 +217,15 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
   const pages: CrawlPage[] = [];
   const urlsFromCrawl: string[] = [];
   const irUrlsFromCrawl: string[] = [];
+  const htmlByUrl = new Map<string, string>();
 
-  // Fetch all URLs in parallel so total time ~= single slow request (~5s), not 5× sequential
-  const results = await Promise.all(
-    urlsToFetch.map(({ url, acceptHtmlOnly }) =>
+  const phase1Results = await Promise.all(
+    phase1Urls.map(({ url, acceptHtmlOnly }) =>
       fetchOne(url, acceptHtmlOnly).then((r) => ({ url, acceptHtmlOnly, ...r }))
     )
   );
 
-  for (const { url, acceptHtmlOnly, status, contentType, body, responseTimeMs, lastModified } of results) {
+  for (const { url, acceptHtmlOnly, status, contentType, body, responseTimeMs, lastModified } of phase1Results) {
     if (url.endsWith("/robots.txt")) {
       if (status === 200 && body) {
         robots.reachable = true;
@@ -222,6 +254,7 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
     }
 
     if (acceptHtmlOnly && (contentType.includes("text/html") || contentType.includes("application/xhtml")) && body) {
+      htmlByUrl.set(url, body);
       pages.push({
         url,
         html: body,
@@ -235,6 +268,37 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
         if (isIrPath(new URL(url).pathname)) irUrlsFromCrawl.push(url);
       } catch {
         // ignore
+      }
+    }
+  }
+
+  const alreadyFetched = new Set(pages.map((p) => p.url));
+  const followCandidates: string[] = [];
+  for (const [, html] of htmlByUrl) {
+    followCandidates.push(...extractEarningsCandidates(html, base));
+  }
+  const followUrls = [...new Set(followCandidates)].filter((u) => !alreadyFetched.has(u)).slice(0, MAX_FOLLOWUP);
+
+  if (followUrls.length > 0) {
+    const phase2Results = await Promise.all(
+      followUrls.map((url) => fetchOne(url, true).then((r) => ({ url, ...r })))
+    );
+    for (const { url, status, contentType, body, responseTimeMs, lastModified } of phase2Results) {
+      if (status === 200 && body && (contentType.includes("text/html") || contentType.includes("application/xhtml"))) {
+        pages.push({
+          url,
+          html: body,
+          status,
+          contentType,
+          responseTimeMs,
+          lastModified: lastModified ?? undefined,
+        });
+        urlsFromCrawl.push(url);
+        try {
+          if (isIrPath(new URL(url).pathname)) irUrlsFromCrawl.push(url);
+        } catch {
+          // ignore
+        }
       }
     }
   }

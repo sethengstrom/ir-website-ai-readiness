@@ -330,6 +330,7 @@ function InvestorQuestionTable({
                   <td className="px-4 py-2 text-zinc-300">{ra.question}</td>
                   <td className={`px-4 py-2 font-medium border-l border-zinc-700/60 bg-emerald-950/20 ${statusColorClass(ra.status)}`}>{statusLabel(ra.status)}</td>
                   <td className="px-4 py-2 text-zinc-400 text-xs bg-emerald-950/20">
+                    {ra.pageType && <span className="block text-[10px] text-zinc-500 uppercase tracking-wide mb-0.5">{ra.pageType}</span>}
                     {ra.evidenceSnippet && <span className="block truncate max-w-[200px]" title={ra.evidenceSnippet}>{ra.evidenceSnippet}</span>}
                     {ra.sourceUrl && (
                       <a href={ra.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-400/80 hover:underline truncate block max-w-[200px]">
@@ -342,6 +343,7 @@ function InvestorQuestionTable({
                     {rb ? statusLabel(rb.status) : "—"}
                   </td>
                   <td className="px-4 py-2 text-zinc-400 text-xs bg-amber-950/10">
+                    {rb?.pageType && <span className="block text-[10px] text-zinc-500 uppercase tracking-wide mb-0.5">{rb.pageType}</span>}
                     {rb?.evidenceSnippet && <span className="block truncate max-w-[200px]" title={rb.evidenceSnippet}>{rb.evidenceSnippet}</span>}
                     {rb?.sourceUrl && (
                       <a href={rb.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-400/80 hover:underline truncate block max-w-[200px]">
