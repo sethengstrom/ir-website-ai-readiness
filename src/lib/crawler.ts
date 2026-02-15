@@ -135,7 +135,7 @@ function extractEarningsCandidates(html: string, baseOrigin: string): string[] {
       // skip invalid URL
     }
   });
-  scored.sort((a, b) => b.score - a.score);
+  scored.sort((a, b) => (b.score !== a.score ? b.score - a.score : a.url.localeCompare(b.url)));
   return scored.map((s) => s.url).slice(0, 5);
 }
 
@@ -277,7 +277,10 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
   for (const [, html] of htmlByUrl) {
     followCandidates.push(...extractEarningsCandidates(html, base));
   }
-  const followUrls = [...new Set(followCandidates)].filter((u) => !alreadyFetched.has(u)).slice(0, MAX_FOLLOWUP);
+  const followUrls = [...new Set(followCandidates)]
+    .filter((u) => !alreadyFetched.has(u))
+    .sort((a, b) => a.localeCompare(b))
+    .slice(0, MAX_FOLLOWUP);
 
   if (followUrls.length > 0) {
     const phase2Results = await Promise.all(

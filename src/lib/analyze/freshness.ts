@@ -1,7 +1,6 @@
 import * as cheerio from "cheerio";
 import type { CrawlPage } from "../crawler";
 import type { Finding } from "../types";
-import { isLikelyIRPath } from "../url-utils";
 
 const EARNINGS_KEYWORDS = ["earnings", "results", "quarter", "webcast", "transcript", "financial results"];
 
@@ -17,7 +16,10 @@ export function analyzeFreshness(pages: CrawlPage[]): { score: number; findings:
   const findings: Finding[] = [];
   let score = 0;
 
-  const earningsPages = pages.filter((p) => pageMatchesEarningsHub(p.url, p.html));
+  // Sort by URL so the same set of pages always yields the same score (deterministic).
+  const sortedPages = [...pages].sort((a, b) => a.url.localeCompare(b.url));
+
+  const earningsPages = sortedPages.filter((p) => pageMatchesEarningsHub(p.url, p.html));
   const earningsScore = earningsPages.length >= 1 ? 100 : 0;
   if (earningsPages.length >= 1) {
     findings.push({
@@ -42,7 +44,7 @@ export function analyzeFreshness(pages: CrawlPage[]): { score: number; findings:
 
   let pagesWithDates = 0;
   let archiveFound = false;
-  for (const page of pages) {
+  for (const page of sortedPages) {
     const $ = cheerio.load(page.html);
     const text = $("body").text() || "";
     DATE_REGEX.lastIndex = 0;
@@ -51,11 +53,13 @@ export function analyzeFreshness(pages: CrawlPage[]): { score: number; findings:
     if (path.includes("archive") || path.includes("releases") || path.includes("events"))
       archiveFound = true;
   }
-  const dateScore = pagesWithDates >= 2 ? 100 : pagesWithDates >= 1 ? 60 : 0;
+  // Use proportion of pages with dates so score is stable when page count varies (e.g. 2 vs 4 pages).
+  const n = Math.max(1, sortedPages.length);
+  const dateScore = Math.round((pagesWithDates / n) * 100);
   findings.push({
     category: "Freshness",
     subcategory: "Dates",
-    signal: `Pages with dates (press/events): ${pagesWithDates}`,
+    signal: `Pages with dates (press/events): ${pagesWithDates}/${sortedPages.length}`,
     score: dateScore,
     evidence: { method: "html_parse" },
     passed: pagesWithDates >= 1,
