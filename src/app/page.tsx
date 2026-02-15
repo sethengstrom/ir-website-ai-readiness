@@ -498,7 +498,7 @@ function FindingsTable({ findings, domainLabel }: { findings: Finding[]; domainL
 
 function HomeContent() {
   const searchParams = useSearchParams();
-  const [domainA, setDomainA] = useState("https://investor.ciena.com/");
+  const [domainA, setDomainA] = useState("");
   const [domainB, setDomainB] = useState("https://investor.workday.com");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
