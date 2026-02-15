@@ -35,7 +35,7 @@ const CATEGORY_ITEMS = [
   { key: "crawlability", label: "Crawlability" },
   { key: "structuredData", label: "Structured data" },
   { key: "parseability", label: "Parseability" },
-  { key: "freshness", label: "Freshness" },
+  { key: "freshness", label: "Recency & dates" },
   { key: "irChecklist", label: "IR checklist" },
 ] as const;
 

@@ -50,12 +50,13 @@ export const CATEGORY_CONTEXT: Record<
     ],
   },
   freshness: {
-    what: "Signals that content is current: earnings/results hubs, dates on press/events pages, and archive sections.",
-    why: "Answer engines prioritize recent, dated content. A clear “latest earnings” area and visible dates help AI surface your most relevant, up-to-date information instead of outdated snippets.",
-    scoreMeaning: "100 = earnings hub detected, dates on releases/events, and archive-style pages. Lower scores suggest weaker freshness signals.",
+    what: "Signals that help AI cite current, dated IR content: an earnings/results hub, visible dates on that hub and other pages, and clear structure for past content.",
+    why: "AI needs to find the right page for earnings answers and see when content is from so it can cite 'as of Q3 2025' and avoid stale snippets. Visible dates and a clear hub make your content more likely to be used in answers.",
+    scoreMeaning: "100 = earnings hub present, hub has a visible date, other pages show dates, and archive/releases-style URLs. Lower scores mean weaker signals for AI to cite current content.",
     improvements: [
-      "Add a clear earnings or financial results hub (page or section with terms like earnings, results, quarter, webcast, transcript).",
-      "Show visible dates (e.g. YYYY-MM-DD or Jan 15, 2025) on press releases and event pages.",
+      "Add a clear earnings or financial results hub (terms like earnings, results, quarter, webcast, transcript).",
+      "Show a visible date on the earnings hub page (e.g. YYYY-MM-DD or 'Q3 2025') so AI can cite recency.",
+      "Show visible dates on press releases and event pages.",
       "Provide archive or all releases / past events pages (URLs containing archive, releases, or events).",
     ],
   },
@@ -174,7 +175,8 @@ const IMPROVEMENT_TRIGGERS: Record<
     { triggers: ["Title", "Meta", "description"], improvement: "Include unique <title> and meta name=\"description\" on every page." },
   ],
   freshness: [
-    { triggers: ["earnings", "hub", "results"], improvement: "Add a clear earnings or financial results hub (page or section with terms like earnings, results, quarter, webcast)." },
+    { triggers: ["earnings", "hub", "results"], improvement: "Add a clear earnings or financial results hub (terms like earnings, results, quarter, webcast)." },
+    { triggers: ["earnings hub page has no visible date", "visible date"], improvement: "Show a visible date on the earnings hub page (e.g. YYYY-MM-DD or Q3 2025) so AI can cite recency." },
     { triggers: ["dates", "pages with dates"], improvement: "Show visible dates (e.g. YYYY-MM-DD) on press releases and event pages." },
     { triggers: ["archive", "releases", "events"], improvement: "Provide archive or all releases / past events pages (URLs containing archive, releases, or events)." },
   ],
