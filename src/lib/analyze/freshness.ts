@@ -9,12 +9,91 @@ import type { Finding } from "../types";
  * - Archive/releases structure: can AI discover past content when needed?
  */
 
-const EARNINGS_KEYWORDS = ["earnings", "results", "quarter", "webcast", "transcript", "financial results"];
+/** Multi-word phrases that strongly indicate an earnings/financial-results hub. Checked first. */
+const EARNINGS_PHRASES = [
+  "financial results",
+  "quarterly results",
+  "earnings results",
+  "earnings call",
+  "quarterly earnings",
+  "investor relations",
+  "press release",
+  "earnings release",
+  "financial release",
+];
 
+/** Single terms that indicate earnings/results content. Used for path, title, and body. */
+const EARNINGS_TERMS = [
+  "earnings",
+  "results",
+  "quarter",
+  "quarterly",
+  "webcast",
+  "transcript",
+  "financials",
+  "revenue",
+  "eps",
+  "q1",
+  "q2",
+  "q3",
+  "q4",
+  "fy",
+  "investor",
+];
+
+const EARNINGS_HUB_THRESHOLD = 4;
+
+/**
+ * Scores how strongly a page looks like an earnings/results hub by combining:
+ * - URL path (strong signal: +2 per phrase/term)
+ * - Page title (+2 per phrase/term)
+ * - Body text first 5k chars (+1 per term, +2 per phrase; capped so one repeated word doesn't dominate)
+ * Returns true if score >= EARNINGS_HUB_THRESHOLD so we catch "financial results", "quarterly results", etc.
+ */
 function pageMatchesEarningsHub(url: string, html: string): boolean {
+  const $ = cheerio.load(html);
   const path = new URL(url).pathname.toLowerCase();
-  const text = (path + " " + cheerio.load(html).text().toLowerCase()).slice(0, 5000);
-  return EARNINGS_KEYWORDS.some((k) => text.includes(k));
+  const title = ($("title").first().text() || "").toLowerCase();
+  const body = ($("body").text() || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 5000);
+
+  let score = 0;
+
+  // Path: strong signal
+  for (const phrase of EARNINGS_PHRASES) {
+    if (path.includes(phrase)) {
+      score += 2;
+      break; // cap path phrase at 2
+    }
+  }
+  for (const term of EARNINGS_TERMS) {
+    if (term.length >= 2 && path.includes(term)) score += 2;
+  }
+
+  // Title: strong signal
+  for (const phrase of EARNINGS_PHRASES) {
+    if (title.includes(phrase)) {
+      score += 2;
+      break;
+    }
+  }
+  for (const term of EARNINGS_TERMS) {
+    if (term.length >= 2 && title.includes(term)) score += 2;
+  }
+
+  // Body: weaker per occurrence, capped
+  let bodyScore = 0;
+  const bodyCap = 8;
+  for (const phrase of EARNINGS_PHRASES) {
+    if (bodyScore >= bodyCap) break;
+    if (body.includes(phrase)) bodyScore += 2;
+  }
+  for (const term of EARNINGS_TERMS) {
+    if (bodyScore >= bodyCap) break;
+    if (term.length >= 2 && body.includes(term)) bodyScore += 1;
+  }
+  score += Math.min(bodyScore, bodyCap);
+
+  return score >= EARNINGS_HUB_THRESHOLD;
 }
 
 function pageHasVisibleDate(html: string): boolean {
