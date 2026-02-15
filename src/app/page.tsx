@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useState, useEffect, useRef, Fragment } from "react";
 import type {
   DomainResult,
@@ -468,6 +469,7 @@ function FindingsTable({ findings, domainLabel }: { findings: Finding[]; domainL
 }
 
 export default function Home() {
+  const searchParams = useSearchParams();
   const [domainA, setDomainA] = useState("https://investor.ciena.com/");
   const [domainB, setDomainB] = useState("https://investor.workday.com");
   const [loading, setLoading] = useState(false);
@@ -483,6 +485,12 @@ export default function Home() {
   const [scanStatusMessage, setScanStatusMessage] = useState("");
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statusIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Auto-fill Domain A from URL query: ?domainA=https://example.com
+  useEffect(() => {
+    const a = searchParams.get("domainA");
+    if (a != null && String(a).trim() !== "") setDomainA(String(a).trim());
+  }, [searchParams]);
 
   const SCAN_STATUS_MESSAGES = [
     "Checking robots.txt & sitemaps…",
