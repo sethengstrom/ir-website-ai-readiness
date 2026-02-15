@@ -8,6 +8,7 @@ import { analyzeParseability } from "./parseability";
 import { analyzeFreshness } from "./freshness";
 import { analyzeIRChecklist } from "./ir-checklist";
 import { analyzeResponseMetrics } from "./response-metrics";
+import { analyzeInvestorQuestionCoverage } from "./investor-questions";
 
 export function analyzeDomain(result: CrawlResult): DomainResult {
   const crawlability = analyzeCrawlability(result);
@@ -49,6 +50,13 @@ export function analyzeDomain(result: CrawlResult): DomainResult {
       categoryScores.irChecklist * weights.irChecklist
   );
 
+  const investorQuestionCoverage = analyzeInvestorQuestionCoverage(result.pages);
+  const aiCitationReadiness = Math.round(
+    investorQuestionCoverage.coverageScore * 0.7 +
+      ((crawlability.score + parseability.score) / 2) * 0.2 +
+      structuredData.score * 0.1
+  );
+
   const firstPage = result.pages[0];
   const faviconUrl =
     firstPage?.html != null
@@ -65,5 +73,7 @@ export function analyzeDomain(result: CrawlResult): DomainResult {
     irUrlCount: result.irUrlsFromCrawl.length + result.sitemap.irUrlCount,
     faviconUrl: faviconUrl ?? undefined,
     structuredDataBreakdown: structuredData.breakdown,
+    aiCitationReadiness: Math.min(100, Math.max(0, aiCitationReadiness)),
+    investorQuestionCoverage,
   };
 }

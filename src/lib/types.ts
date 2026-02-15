@@ -59,4 +59,30 @@ export interface DomainResult {
   faviconUrl?: string;
   /** Structured data (JSON-LD) breakdown; used to show schema-only score and missing types. */
   structuredDataBreakdown?: StructuredDataBreakdown;
+  /** AI Citation Readiness (0–100): weighted by question coverage, crawlability/parseability, structured data. */
+  aiCitationReadiness?: number;
+  /** Per-question answerability for investor Q&A. */
+  investorQuestionCoverage?: InvestorQuestionCoverage;
 }
+
+/** Per-question result for Investor Question Coverage (AI answerability). */
+export type InvestorQuestionStatus = "answerable" | "partial" | "not_answerable";
+
+export interface InvestorQuestionResult {
+  id: string;
+  question: string;
+  status: InvestorQuestionStatus;
+  explanation: string;
+  sourceUrl?: string;
+  evidenceSnippet?: string;
+}
+
+/** Result of testing ~10 common investor questions against fetched pages. */
+export interface InvestorQuestionCoverage {
+  questionResults: InvestorQuestionResult[];
+  /** 0–100: share of questions answerable (full + 0.5 for partial). */
+  coverageScore: number;
+}
+
+/** Top-level score (0–100) for AI citation likelihood: 70% question coverage, 20% crawl/parse, 10% structured data. */
+export type AICitationReadinessScore = number;

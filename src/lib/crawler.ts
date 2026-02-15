@@ -1,7 +1,6 @@
 /**
- * Lightweight fetcher for sales-demo: no deep crawl, no sitemap traversal.
- * Fetches only: homepage, /investor, /ir, robots.txt, sitemap.xml.
- * All 5 requests per domain run in parallel so total time fits within serverless limits (e.g. 10s).
+ * Lightweight fetcher: homepage, IR paths (/investor, /ir, /news), robots.txt, sitemap.xml.
+ * Max 6 requests per domain, 8s timeout each; parallel for Vercel-safe total time.
  */
 
 import * as cheerio from "cheerio";
@@ -9,8 +8,8 @@ import { getOrigin } from "./url-utils";
 import type { RobotsResult } from "./robots";
 import type { SitemapResult } from "./sitemap";
 
-const FETCH_TIMEOUT_MS = 5000;
-const MAX_REQUESTS_PER_DOMAIN = 5;
+const FETCH_TIMEOUT_MS = 8000;
+const MAX_REQUESTS_PER_DOMAIN = 6;
 const USER_AGENT = "IR-AI-Readiness-Scanner/1.0";
 
 export interface CrawlPage {
@@ -163,6 +162,7 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
     { url: `${base}/sitemap.xml`, acceptHtmlOnly: false },
     { url: `${base}/investor`, acceptHtmlOnly: true },
     { url: `${base}/ir`, acceptHtmlOnly: true },
+    { url: `${base}/news`, acceptHtmlOnly: true },
   ].slice(0, MAX_REQUESTS_PER_DOMAIN);
 
   const robots: RobotsResult = {

@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef, Fragment } from "react";
-import type { DomainResult, Finding, StructuredDataBreakdown } from "@/lib/types";
+import type {
+  DomainResult,
+  Finding,
+  StructuredDataBreakdown,
+  InvestorQuestionResult,
+  InvestorQuestionStatus,
+} from "@/lib/types";
 import { AEO_INTRO, CATEGORY_CONTEXT, getFindingWhyItMatters } from "@/lib/aeo-context";
 
 async function runScan(domainA: string, domainB: string): Promise<{
@@ -167,16 +173,17 @@ function ResultsByCategory({
           </div>
         </div>
         <div className="flex flex-col items-center gap-1 min-w-[7rem]">
-          <span className="text-xs text-zinc-500 font-medium">Overall AI Readiness Score</span>
+          <span className="text-xs text-zinc-500 font-medium">AI Citation Readiness</span>
           <div className="flex items-center gap-6">
-            <span className={`text-5xl font-bold tabular-nums w-14 text-right ${scoreColorClass(resultA.overallScore)}`}>
-              {resultA.overallScore}
+            <span className={`text-5xl font-bold tabular-nums w-14 text-right ${scoreColorClass(resultA.aiCitationReadiness ?? resultA.overallScore)}`}>
+              {resultA.aiCitationReadiness ?? resultA.overallScore}
             </span>
             <span className="text-zinc-500 text-sm font-medium shrink-0">vs</span>
-            <span className={`text-5xl font-bold tabular-nums w-14 text-left ${scoreColorClass(resultB.overallScore)}`}>
-              {resultB.overallScore}
+            <span className={`text-5xl font-bold tabular-nums w-14 text-left ${scoreColorClass(resultB.aiCitationReadiness ?? resultB.overallScore)}`}>
+              {resultB.aiCitationReadiness ?? resultB.overallScore}
             </span>
           </div>
+          <span className="text-[10px] text-zinc-500">Overall readiness: {resultA.overallScore} vs {resultB.overallScore}</span>
         </div>
         <div className="flex items-center gap-2 min-w-0 justify-end">
           {resultB.faviconUrl && (
@@ -247,6 +254,100 @@ function StructuredDataBreakdownCard({
       ) : (
         <p className="text-xs text-emerald-500/90">All recommended IR schema types present.</p>
       )}
+    </div>
+  );
+}
+
+function statusLabel(s: InvestorQuestionStatus): string {
+  switch (s) {
+    case "answerable":
+      return "✓ Answerable";
+    case "partial":
+      return "◐ Partial";
+    default:
+      return "— Not";
+  }
+}
+
+function statusColorClass(s: InvestorQuestionStatus): string {
+  switch (s) {
+    case "answerable":
+      return "text-emerald-400";
+    case "partial":
+      return "text-amber-400";
+    default:
+      return "text-zinc-500";
+  }
+}
+
+function InvestorQuestionTable({
+  resultsA,
+  resultsB,
+  domainLabelA,
+  domainLabelB,
+}: {
+  resultsA: InvestorQuestionResult[];
+  resultsB: InvestorQuestionResult[];
+  domainLabelA: string;
+  domainLabelB: string;
+}) {
+  const rows = resultsA.length >= resultsB.length ? resultsA : resultsB;
+  const getB = (id: string) => resultsB.find((r) => r.id === id);
+  return (
+    <div className="rounded-xl border border-zinc-700/60 bg-zinc-900/40 overflow-hidden">
+      <div className="px-4 py-3 border-b border-zinc-700/60 bg-zinc-800/30">
+        <h3 className="font-medium text-white text-sm">Investor question coverage (AI answerability)</h3>
+        <p className="text-xs text-zinc-500 mt-0.5">
+          Pass/fail per question with evidence and source URL. ✓ Answerable, ◐ Partial, — Not answerable.
+        </p>
+      </div>
+      <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 bg-zinc-800/95 text-zinc-400 text-left">
+            <tr>
+              <th className="px-4 py-2 w-8">#</th>
+              <th className="px-4 py-2 min-w-[180px]">Question</th>
+              <th className="px-4 py-2 w-28">{domainLabelA}</th>
+              <th className="px-4 py-2 min-w-[140px]">Evidence / URL (A)</th>
+              <th className="px-4 py-2 w-28">{domainLabelB}</th>
+              <th className="px-4 py-2 min-w-[140px]">Evidence / URL (B)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((ra, i) => {
+              const rb = getB(ra.id);
+              return (
+                <tr key={ra.id} className="border-t border-zinc-700/40 hover:bg-zinc-800/40">
+                  <td className="px-4 py-2 text-zinc-500 tabular-nums">{i + 1}</td>
+                  <td className="px-4 py-2 text-zinc-300">{ra.question}</td>
+                  <td className={`px-4 py-2 font-medium ${statusColorClass(ra.status)}`}>{statusLabel(ra.status)}</td>
+                  <td className="px-4 py-2 text-zinc-400 text-xs">
+                    {ra.evidenceSnippet && <span className="block truncate max-w-[200px]" title={ra.evidenceSnippet}>{ra.evidenceSnippet}</span>}
+                    {ra.sourceUrl && (
+                      <a href={ra.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-400/80 hover:underline truncate block max-w-[200px]">
+                        {ra.sourceUrl}
+                      </a>
+                    )}
+                    {!ra.evidenceSnippet && !ra.sourceUrl && ra.explanation && <span className="text-zinc-500">{ra.explanation}</span>}
+                  </td>
+                  <td className={`px-4 py-2 font-medium ${rb ? statusColorClass(rb.status) : "text-zinc-500"}`}>
+                    {rb ? statusLabel(rb.status) : "—"}
+                  </td>
+                  <td className="px-4 py-2 text-zinc-400 text-xs">
+                    {rb?.evidenceSnippet && <span className="block truncate max-w-[200px]" title={rb.evidenceSnippet}>{rb.evidenceSnippet}</span>}
+                    {rb?.sourceUrl && (
+                      <a href={rb.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-400/80 hover:underline truncate block max-w-[200px]">
+                        {rb.sourceUrl}
+                      </a>
+                    )}
+                    {rb && !rb.evidenceSnippet && !rb.sourceUrl && rb.explanation && <span className="text-zinc-500">{rb.explanation}</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -545,6 +646,17 @@ export default function Home() {
                 />
               </div>
             </section>
+
+            {(result.resultA.investorQuestionCoverage ?? result.resultB.investorQuestionCoverage) && (
+              <section className="px-4 py-3 border-t border-zinc-700/60">
+                <InvestorQuestionTable
+                  resultsA={result.resultA.investorQuestionCoverage?.questionResults ?? []}
+                  resultsB={result.resultB.investorQuestionCoverage?.questionResults ?? []}
+                  domainLabelA={result.resultA.domain}
+                  domainLabelB={result.resultB.domain}
+                />
+              </section>
+            )}
 
             <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <FindingsTable
