@@ -303,14 +303,22 @@ function InvestorQuestionTable({
       </div>
       <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-zinc-800/95 text-zinc-400 text-left">
+          <thead className="sticky top-0 bg-zinc-800/95 text-zinc-400 text-left z-10">
             <tr>
-              <th className="px-4 py-2 w-8">#</th>
-              <th className="px-4 py-2 min-w-[180px]">Question</th>
-              <th className="px-4 py-2 w-28">{domainLabelA}</th>
-              <th className="px-4 py-2 min-w-[140px]">Evidence / URL (A)</th>
-              <th className="px-4 py-2 w-28">{domainLabelB}</th>
-              <th className="px-4 py-2 min-w-[140px]">Evidence / URL (B)</th>
+              <th className="px-4 py-2 w-8" rowSpan={2}>#</th>
+              <th className="px-4 py-2 min-w-[180px]" rowSpan={2}>Question</th>
+              <th colSpan={2} className="px-4 py-2 text-center font-semibold text-white bg-emerald-900/30 border-l border-zinc-600/60">
+                {domainLabelA}
+              </th>
+              <th colSpan={2} className="px-4 py-2 text-center font-semibold text-white bg-amber-900/20 border-l-2 border-zinc-600">
+                {domainLabelB}
+              </th>
+            </tr>
+            <tr>
+              <th className="px-4 py-1.5 w-28 border-l border-zinc-600/60 bg-emerald-900/20">Status</th>
+              <th className="px-4 py-1.5 min-w-[140px] bg-emerald-900/20">Evidence / URL</th>
+              <th className="px-4 py-1.5 w-28 border-l-2 border-zinc-600 bg-amber-900/15">Status</th>
+              <th className="px-4 py-1.5 min-w-[140px] bg-amber-900/15">Evidence / URL</th>
             </tr>
           </thead>
           <tbody>
@@ -320,8 +328,8 @@ function InvestorQuestionTable({
                 <tr key={ra.id} className="border-t border-zinc-700/40 hover:bg-zinc-800/40">
                   <td className="px-4 py-2 text-zinc-500 tabular-nums">{i + 1}</td>
                   <td className="px-4 py-2 text-zinc-300">{ra.question}</td>
-                  <td className={`px-4 py-2 font-medium ${statusColorClass(ra.status)}`}>{statusLabel(ra.status)}</td>
-                  <td className="px-4 py-2 text-zinc-400 text-xs">
+                  <td className={`px-4 py-2 font-medium border-l border-zinc-700/60 bg-emerald-950/20 ${statusColorClass(ra.status)}`}>{statusLabel(ra.status)}</td>
+                  <td className="px-4 py-2 text-zinc-400 text-xs bg-emerald-950/20">
                     {ra.evidenceSnippet && <span className="block truncate max-w-[200px]" title={ra.evidenceSnippet}>{ra.evidenceSnippet}</span>}
                     {ra.sourceUrl && (
                       <a href={ra.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-400/80 hover:underline truncate block max-w-[200px]">
@@ -330,10 +338,10 @@ function InvestorQuestionTable({
                     )}
                     {!ra.evidenceSnippet && !ra.sourceUrl && ra.explanation && <span className="text-zinc-500">{ra.explanation}</span>}
                   </td>
-                  <td className={`px-4 py-2 font-medium ${rb ? statusColorClass(rb.status) : "text-zinc-500"}`}>
+                  <td className={`px-4 py-2 font-medium border-l-2 border-zinc-600 bg-amber-950/10 ${rb ? statusColorClass(rb.status) : "text-zinc-500"}`}>
                     {rb ? statusLabel(rb.status) : "—"}
                   </td>
-                  <td className="px-4 py-2 text-zinc-400 text-xs">
+                  <td className="px-4 py-2 text-zinc-400 text-xs bg-amber-950/10">
                     {rb?.evidenceSnippet && <span className="block truncate max-w-[200px]" title={rb.evidenceSnippet}>{rb.evidenceSnippet}</span>}
                     {rb?.sourceUrl && (
                       <a href={rb.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-400/80 hover:underline truncate block max-w-[200px]">
