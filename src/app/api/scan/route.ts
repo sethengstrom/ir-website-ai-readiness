@@ -10,8 +10,8 @@ const CACHE_DAYS = 7;
 /** Set to true to return cached results for same domain pair within CACHE_DAYS. Disabled while scans are fast. */
 const USE_CACHE = false;
 
-/** Global scan timeout (45s) so one slow domain doesn't hang the request. */
-const SCAN_TIMEOUT_MS = 45_000;
+/** Global scan timeout (60s) so slow IR sites have time to respond. */
+const SCAN_TIMEOUT_MS = 60_000;
 
 /** Rate limit: max requests per IP per window. */
 const RATE_LIMIT_WINDOW_MS = 60_000;

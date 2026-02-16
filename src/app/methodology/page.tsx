@@ -84,7 +84,7 @@ export default function MethodologyPage() {
         <section>
           <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Crawl process</h2>
           <p className="text-[var(--muted)] text-base leading-relaxed mb-3">
-            Per domain we do a two-phase fetch (max 9 requests total, 8s timeout each) to balance speed with coverage:
+            Per domain we do a two-phase fetch (max 9 requests total, 12s timeout each) to balance speed with coverage:
           </p>
           <ul className="list-disc list-inside text-[var(--muted)] text-base space-y-1 ml-2">
             <li><strong className="text-[var(--foreground)]">Phase 1 (5 requests):</strong> Homepage, robots.txt, sitemap.xml, /investor, /investors.</li>

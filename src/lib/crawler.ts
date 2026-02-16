@@ -2,7 +2,7 @@
  * Two-phase fetcher for a balance of speed and coverage:
  * Phase 1 = homepage, robots, sitemap, /investor, /investors (5).
  * Phase 2 = up to 4 earnings-related links from phase 1 HTML.
- * Max 9 requests per domain, 8s timeout each. More pages improve investor-question coverage.
+ * Max 9 requests per domain, 12s timeout each. Uses Promise.allSettled so one slow/failing request doesn't abort the crawl.
  */
 
 import * as cheerio from "cheerio";
@@ -10,7 +10,8 @@ import { getOrigin } from "./url-utils";
 import type { RobotsResult } from "./robots";
 import type { SitemapResult } from "./sitemap";
 
-const FETCH_TIMEOUT_MS = 8000;
+/** Per-request timeout; slow IR sites may need 12s+ to respond. */
+const FETCH_TIMEOUT_MS = 12000;
 const MAX_PHASE1 = 5;
 const MAX_FOLLOWUP = 4;
 const USER_AGENT = "IR-AI-Readiness-Scanner/1.0";
@@ -211,8 +212,10 @@ async function fetchOne(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
+      const headers: Record<string, string> = { "User-Agent": USER_AGENT };
+      if (acceptHtmlOnly) headers["Accept"] = "text/html,application/xhtml+xml";
       const res = await fetch(url, {
-        headers: { "User-Agent": USER_AGENT },
+        headers,
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -283,13 +286,23 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
   const irUrlsFromCrawl: string[] = [];
   const htmlByUrl = new Map<string, string>();
 
-  const phase1Results = await Promise.all(
+  const phase1Settled = await Promise.allSettled(
     phase1Urls.map(({ url, acceptHtmlOnly }) =>
       fetchOne(url, acceptHtmlOnly).then((r) => ({ url, acceptHtmlOnly, ...r }))
     )
   );
+  const phase1Results = phase1Settled.map((p) =>
+    p.status === "fulfilled" ? p.value : { url: "", acceptHtmlOnly: false, status: 0, contentType: "", body: "", responseTimeMs: 0, lastModified: null }
+  );
+  // Reattach url/acceptHtmlOnly for entries that failed so we can skip them
+  phase1Urls.forEach((u, i) => {
+    if (phase1Settled[i].status === "fulfilled") return;
+    (phase1Results[i] as { url: string; acceptHtmlOnly: boolean }).url = u.url;
+    (phase1Results[i] as { url: string; acceptHtmlOnly: boolean }).acceptHtmlOnly = u.acceptHtmlOnly;
+  });
 
   for (const { url, acceptHtmlOnly, status, contentType, body, responseTimeMs, lastModified } of phase1Results) {
+    if (!url) continue;
     if (url.endsWith("/robots.txt")) {
       if (status === 200 && body) {
         robots.reachable = true;
@@ -347,10 +360,13 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
     .slice(0, MAX_FOLLOWUP);
 
   if (followUrls.length > 0) {
-    const phase2Results = await Promise.all(
+    const phase2Settled = await Promise.allSettled(
       followUrls.map((url) => fetchOne(url, true).then((r) => ({ url, ...r })))
     );
-    for (const { url, status, contentType, body, responseTimeMs, lastModified } of phase2Results) {
+    for (let i = 0; i < phase2Settled.length; i++) {
+      const p = phase2Settled[i];
+      const { url, status, contentType, body, responseTimeMs, lastModified } =
+        p.status === "fulfilled" ? p.value : { url: followUrls[i], status: 0, contentType: "", body: "", responseTimeMs: 0, lastModified: null };
       if (status === 200 && body && (contentType.includes("text/html") || contentType.includes("application/xhtml"))) {
         pages.push({
           url,
