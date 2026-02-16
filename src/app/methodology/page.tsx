@@ -84,11 +84,11 @@ export default function MethodologyPage() {
         <section>
           <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Crawl process</h2>
           <p className="text-[var(--muted)] text-base leading-relaxed mb-3">
-            Per domain we do a two-phase fetch (max 6 requests total, 8s timeout each):
+            Per domain we do a two-phase fetch (max 9 requests total, 8s timeout each) to balance speed with coverage:
           </p>
           <ul className="list-disc list-inside text-[var(--muted)] text-base space-y-1 ml-2">
-            <li><strong className="text-[var(--foreground)]">Phase 1 (4 requests):</strong> Homepage, robots.txt, sitemap.xml, /investor.</li>
-            <li><strong className="text-[var(--foreground)]">Phase 2 (up to 2 requests):</strong> From phase 1 HTML we collect same-origin links whose URL or anchor matches earnings-related terms (earnings, results, quarterly, q1–q4, webcast, replay, transcript, press-release, financials, etc.). We rank them deterministically and fetch up to 2 additional pages to improve earnings-question coverage.</li>
+            <li><strong className="text-[var(--foreground)]">Phase 1 (5 requests):</strong> Homepage, robots.txt, sitemap.xml, /investor, /investors.</li>
+            <li><strong className="text-[var(--foreground)]">Phase 2 (up to 4 requests):</strong> From phase 1 HTML we collect same-origin links whose URL or anchor matches earnings-related terms (earnings, results, quarterly, q1–q4, webcast, replay, transcript, press-release, financials, etc.). We rank them deterministically and fetch up to 4 additional pages to improve earnings-question coverage.</li>
           </ul>
           <p className="text-[var(--muted)] text-base leading-relaxed mt-3">
             Only HTML from successful responses is used for analysis. No sitemap traversal or recursive crawl.

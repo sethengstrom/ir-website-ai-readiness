@@ -1,6 +1,8 @@
 /**
- * Lightweight fetcher: phase 1 = homepage, /investor, robots, sitemap (4); phase 2 = up to 2
- * earnings-related links discovered from phase 1 HTML. Max 6 requests per domain, 8s timeout each.
+ * Two-phase fetcher for a balance of speed and coverage:
+ * Phase 1 = homepage, robots, sitemap, /investor, /investors (5).
+ * Phase 2 = up to 4 earnings-related links from phase 1 HTML.
+ * Max 9 requests per domain, 8s timeout each. More pages improve investor-question coverage.
  */
 
 import * as cheerio from "cheerio";
@@ -9,8 +11,8 @@ import type { RobotsResult } from "./robots";
 import type { SitemapResult } from "./sitemap";
 
 const FETCH_TIMEOUT_MS = 8000;
-const MAX_PHASE1 = 4;
-const MAX_FOLLOWUP = 2;
+const MAX_PHASE1 = 5;
+const MAX_FOLLOWUP = 4;
 const USER_AGENT = "IR-AI-Readiness-Scanner/1.0";
 const RETRY_MAX = 2;
 const RETRY_BASE_MS = 500;
@@ -169,7 +171,7 @@ function extractEarningsCandidates(html: string, baseOrigin: string): string[] {
     }
   });
   scored.sort((a, b) => (b.score !== a.score ? b.score - a.score : a.url.localeCompare(b.url)));
-  return scored.map((s) => s.url).slice(0, 5);
+  return scored.map((s) => s.url).slice(0, 8);
 }
 
 function shouldRetry(status: number): boolean {
@@ -256,6 +258,7 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
     { url: `${base}/robots.txt`, acceptHtmlOnly: false },
     { url: `${base}/sitemap.xml`, acceptHtmlOnly: false },
     { url: `${base}/investor`, acceptHtmlOnly: true },
+    { url: `${base}/investors`, acceptHtmlOnly: true },
   ].slice(0, MAX_PHASE1);
 
   const robots: RobotsResult = {

@@ -289,7 +289,7 @@ export function downloadResultsPdf(resultA: DomainResult, resultB: DomainResult 
   doc.setFontSize(8);
   doc.setTextColor(128, 128, 128);
   doc.text(
-    "IR AI Readiness Scanner - Compare domains for investor relations AI/agent retrieval signals. Methodology: scan results may be cached.",
+    "IR AI Readiness Scanner - How ready your IR site is for AI to answer investor questions. Scan results may be cached.",
     14,
     287,
     { maxWidth: pageWidth - 28 }

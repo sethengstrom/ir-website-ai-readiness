@@ -720,7 +720,7 @@ function HomeContent() {
           <div>
             <h1 className="text-2xl font-bold text-[var(--foreground)]">IR AI Readiness Scanner</h1>
             <p className="text-[var(--muted)] text-sm mt-1">
-              Compare two domains for investor relations AI/agent retrieval signals
+              See how ready your IR site is for AI assistants to answer investor questions—and what to fix.
             </p>
           </div>
           <div className="mt-4 p-4 rounded-lg bg-[var(--card)]/50 border border-[var(--card-border)] text-sm">
@@ -806,7 +806,7 @@ function HomeContent() {
               />
             </div>
             <p className="text-sm text-zinc-500">
-              This usually takes <strong className="text-zinc-400">under 30 seconds</strong>. We fetch the homepage, key IR paths, robots.txt, and sitemap, then analyze each site. Please don’t close this page.
+              This usually takes <strong className="text-zinc-400">under 15 seconds</strong>. We fetch the homepage, /investor, /investors, and up to 4 earnings-related pages per domain, then analyze each site. Please don’t close this page.
             </p>
           </div>
         )}

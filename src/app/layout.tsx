@@ -6,17 +6,17 @@ export const metadata: Metadata = {
     ? new URL(process.env.NEXT_PUBLIC_SITE_URL)
     : undefined,
   title: "IR AI Readiness Scanner",
-  description: "Compare two domains for investor relations AI/agent retrieval readiness",
+  description: "See how ready your IR site is for AI to answer investor questions. Compare domains and get actionable improvements.",
   openGraph: {
     title: "IR AI Readiness Scanner",
-    description: "Compare two domains for investor relations AI/agent retrieval readiness",
+    description: "See how ready your IR site is for AI to answer investor questions. Compare domains and get actionable improvements.",
     siteName: "IR AI Readiness Scanner",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "IR AI Readiness Scanner",
-    description: "Compare two domains for investor relations AI/agent retrieval readiness",
+    description: "See how ready your IR site is for AI to answer investor questions. Compare domains and get actionable improvements.",
   },
 };
 
