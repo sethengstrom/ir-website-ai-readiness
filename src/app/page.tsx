@@ -11,7 +11,7 @@ import type {
   InvestorQuestionStatus,
 } from "@/lib/types";
 import { AEO_INTRO, CATEGORY_CONTEXT, getFindingWhyItMatters, getCategoryFindingsForDomain } from "@/lib/aeo-context";
-import { messageForCode, isScanErrorCode } from "@/lib/scan-errors";
+import { messageForCode, isScanErrorCode, SCAN_ERROR_CODES } from "@/lib/scan-errors";
 import { downloadResultsPdf } from "@/lib/download-report-pdf";
 
 type ScanProgressEvent = { phase: string; message: string; progress: number };
@@ -106,17 +106,17 @@ const CATEGORY_ITEMS = [
   { key: "irChecklist", label: "IR checklist" },
 ] as const;
 
-const PRESET_IR_SITES: { name: string; url: string }[] = [
+const PRESET_IR_SITES_A = [
   { name: "Alphabet", url: "https://abc.xyz/investor/" },
   { name: "Netflix", url: "https://ir.netflix.net" },
   { name: "Tesla", url: "https://ir.tesla.com" },
   { name: "NVIDIA", url: "https://investor.nvidia.com" },
-  { name: "Visa", url: "https://investor.visa.com" },
-  { name: "Chase", url: "https://www.jpmorganchase.com/ir" },
+] as const;
+const PRESET_IR_SITES_B = [
   { name: "Workday", url: "https://workday.com" },
   { name: "Tetra Tech", url: "https://investor.tetratech.com/overview/default.aspx" },
   { name: "Emera", url: "https://investors.emera.com/overview/default.aspx" },
-];
+] as const;
 
 function scoreColorClass(score: number): string {
   if (score >= 80) return "text-emerald-400";
@@ -257,19 +257,74 @@ function CategoryRows({
 function ResultsByCategory({
   resultA,
   resultB,
+  stickyHeader,
 }: {
   resultA: DomainResult;
   resultB: DomainResult | null;
+  stickyHeader?: React.ReactNode;
 }) {
   const singleDomain = resultB == null;
-  return (
-    <section className="rounded-xl border border-zinc-700/60 bg-zinc-900/40 overflow-hidden">
-      {/* Overall strip: single-domain or compare */}
-      <div className={`grid gap-3 md:gap-4 p-4 border-b border-zinc-700/60 bg-zinc-800/30 items-center ${singleDomain ? "grid-cols-1" : "grid-cols-2 md:grid-cols-[1fr_auto_1fr]"}`}>
-        <div className="flex items-center gap-2 min-w-0 order-2 md:order-1">
-          {resultA.faviconUrl && (
+  const strip = (
+    <div className={`grid gap-3 md:gap-4 p-4 border-b border-zinc-700/60 bg-zinc-800/30 items-center ${singleDomain ? "grid-cols-1" : "grid-cols-2 md:grid-cols-[1fr_auto_1fr]"}`}>
+      <div className="flex items-center gap-2 min-w-0 order-2 md:order-1">
+        {resultA.faviconUrl && (
+          <img
+            src={resultA.faviconUrl}
+            alt=""
+            className="h-7 w-7 shrink-0 rounded object-contain bg-white/10"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
+        )}
+        <div className="min-w-0">
+          <span className="text-sm font-medium text-white truncate block" title={resultA.domain}>
+            {resultA.domain}
+          </span>
+          <span className="text-sm text-zinc-500">
+            overall · {resultA.crawledPageCount} pages
+          </span>
+        </div>
+      </div>
+      <div className={`flex flex-col items-center gap-1 min-w-0 ${singleDomain ? "" : "col-span-2 md:col-span-1"} md:min-w-[7rem] order-1 md:order-2`}>
+        <span className="text-sm text-zinc-500 font-medium flex items-center gap-1.5 flex-wrap justify-center">
+          Overall readiness
+          <Link
+            href="/methodology"
+            className="text-sm text-emerald-400/80 hover:text-emerald-400 underline"
+          >
+            How we score
+          </Link>
+        </span>
+        <div className="flex items-center gap-4 md:gap-6">
+          <span className={`text-4xl md:text-5xl font-bold tabular-nums ${singleDomain ? "" : "text-right"} ${scoreColorClass(resultA.overallScore)}`}>
+            {resultA.overallScore}
+          </span>
+          {!singleDomain && (
+            <>
+              <span className="text-zinc-500 text-sm font-medium shrink-0">vs</span>
+              <span className={`text-4xl md:text-5xl font-bold tabular-nums text-left ${scoreColorClass(resultB!.overallScore)}`}>
+                {resultB!.overallScore}
+              </span>
+            </>
+          )}
+        </div>
+        <span className="text-sm text-zinc-500">
+          AI Citation: {resultA.aiCitationReadiness ?? "—"}
+          {!singleDomain && ` vs ${resultB!.aiCitationReadiness ?? "—"}`}
+        </span>
+        <p className="text-xs text-zinc-500 text-center mt-0.5">
+          Based on crawlability, structured data, parseability, freshness, and IR checklist.{" "}
+          <Link href="/methodology" className="text-emerald-400/80 hover:text-emerald-400 underline">
+            Methodology
+          </Link>
+        </p>
+      </div>
+      {!singleDomain && (
+        <div className="flex items-center gap-2 min-w-0 justify-end order-3 md:order-3">
+          {resultB!.faviconUrl && (
             <img
-              src={resultA.faviconUrl}
+              src={resultB!.faviconUrl}
               alt=""
               className="h-7 w-7 shrink-0 rounded object-contain bg-white/10"
               onError={(e) => {
@@ -277,65 +332,23 @@ function ResultsByCategory({
               }}
             />
           )}
-          <div className="min-w-0">
-            <span className="text-sm font-medium text-white truncate block" title={resultA.domain}>
-              {resultA.domain}
+          <div className="min-w-0 text-right">
+            <span className="text-sm font-medium text-white truncate block" title={resultB!.domain}>
+              {resultB!.domain}
             </span>
-            <span className="text-sm text-zinc-500">
-              overall · {resultA.crawledPageCount} pages
-            </span>
-          </div>
-        </div>
-        <div className={`flex flex-col items-center gap-1 min-w-0 ${singleDomain ? "" : "col-span-2 md:col-span-1"} md:min-w-[7rem] order-1 md:order-2`}>
-          <span className="text-sm text-zinc-500 font-medium flex items-center gap-1.5 flex-wrap justify-center">
-            Overall readiness
-            <Link
-              href="/methodology"
-              className="text-sm text-emerald-400/80 hover:text-emerald-400 underline"
-            >
-              How we score
-            </Link>
-          </span>
-          <div className="flex items-center gap-4 md:gap-6">
-            <span className={`text-4xl md:text-5xl font-bold tabular-nums ${singleDomain ? "" : "text-right"} ${scoreColorClass(resultA.overallScore)}`}>
-              {resultA.overallScore}
-            </span>
-            {!singleDomain && (
-              <>
-                <span className="text-zinc-500 text-sm font-medium shrink-0">vs</span>
-                <span className={`text-4xl md:text-5xl font-bold tabular-nums text-left ${scoreColorClass(resultB!.overallScore)}`}>
-                  {resultB!.overallScore}
-                </span>
-              </>
-            )}
-          </div>
-          <span className="text-sm text-zinc-500">
-            AI Citation: {resultA.aiCitationReadiness ?? "—"}
-            {!singleDomain && ` vs ${resultB!.aiCitationReadiness ?? "—"}`}
-          </span>
-        </div>
-        {!singleDomain && (
-          <div className="flex items-center gap-2 min-w-0 justify-end order-3 md:order-3">
-            {resultB!.faviconUrl && (
-              <img
-                src={resultB!.faviconUrl}
-                alt=""
-                className="h-7 w-7 shrink-0 rounded object-contain bg-white/10"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
-              />
-            )}
-            <div className="min-w-0 text-right">
-              <span className="text-sm font-medium text-white truncate block" title={resultB!.domain}>
-                {resultB!.domain}
-              </span>
             <span className="text-sm text-zinc-500">
               overall · {resultB!.crawledPageCount} pages
             </span>
-            </div>
           </div>
-        )}
+        </div>
+      )}
+    </div>
+  );
+  return (
+    <section className="rounded-xl border border-zinc-700/60 bg-zinc-900/40 overflow-hidden">
+      <div className="sticky top-0 z-10 bg-[var(--background)] border-b border-zinc-700/60 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.3)]">
+        {strip}
+        {stickyHeader && <div className="px-4 pb-3 flex flex-wrap items-center gap-3">{stickyHeader}</div>}
       </div>
 
       <CategoryRows
@@ -634,6 +647,8 @@ function HomeContent() {
 
   const [scanProgress, setScanProgress] = useState(0);
   const [scanStatusMessage, setScanStatusMessage] = useState("");
+  const [retryBlockedUntil, setRetryBlockedUntil] = useState(0);
+  const [retryCountdown, setRetryCountdown] = useState(0);
 
   // Auto-fill from URL: ?domainA=... and ?domainB=...
   useEffect(() => {
@@ -643,7 +658,17 @@ function HomeContent() {
     if (b != null && String(b).trim() !== "") setDomainB(String(b).trim());
   }, [searchParams]);
 
-  const doScan = async () => {
+  // Countdown for rate-limit retry
+  useEffect(() => {
+    if (retryBlockedUntil <= 0) return;
+    const id = setInterval(() => {
+      const left = Math.max(0, Math.ceil((retryBlockedUntil - Date.now()) / 1000));
+      setRetryCountdown(left);
+    }, 500);
+    return () => clearInterval(id);
+  }, [retryBlockedUntil]);
+
+  const doScan = async (forceRefresh = false) => {
     setError(null);
     setLoading(true);
     setScanProgress(0);
@@ -663,12 +688,31 @@ function HomeContent() {
       });
     } catch (err) {
       const e = err as Error & { code?: string };
-      const message =
-        e?.code && isScanErrorCode(e.code) ? messageForCode(e.code) : e instanceof Error ? e.message : "Scan failed";
+      let message: string;
+      if (e?.code && isScanErrorCode(e.code)) {
+        message = messageForCode(e.code);
+        if (e.code === SCAN_ERROR_CODES.RATE_LIMIT_EXCEEDED) {
+          const until = Date.now() + 60_000;
+          setRetryBlockedUntil(until);
+          setRetryCountdown(60);
+        }
+      } else if (e instanceof Error && (e.message === "Failed to fetch" || e.name === "TypeError")) {
+        message = "Check your connection and try again.";
+      } else {
+        message = e instanceof Error ? e.message : "Scan failed";
+      }
       setError(message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRetry = () => {
+    setError(null);
+    if (retryBlockedUntil > Date.now()) return;
+    const delayMs = 1500;
+    setScanStatusMessage("Retrying in a moment…");
+    setTimeout(() => doScan(), delayMs);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -719,7 +763,7 @@ function HomeContent() {
               autoComplete="url"
             />
             <div className="flex flex-wrap gap-1.5 mt-2 min-w-0">
-              {PRESET_IR_SITES.slice(0, 6).map(({ name, url }) => (
+              {PRESET_IR_SITES_A.map(({ name, url }) => (
                 <button
                   key={`a-${name}`}
                   type="button"
@@ -753,7 +797,7 @@ function HomeContent() {
               autoComplete="url"
             />
             <div className="flex flex-wrap gap-1.5 mt-2 min-w-0">
-              {PRESET_IR_SITES.slice(6, 9).map(({ name, url }) => (
+              {PRESET_IR_SITES_B.map(({ name, url }) => (
                 <button
                   key={`b-${name}`}
                   type="button"
@@ -797,43 +841,64 @@ function HomeContent() {
               </button>
               <button
                 type="button"
-                onClick={() => { setError(null); doScan(); }}
-                className="px-3 py-1.5 rounded text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-[var(--background)]"
+                onClick={handleRetry}
+                disabled={retryBlockedUntil > Date.now()}
+                className="px-3 py-1.5 rounded text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-[var(--background)]"
               >
-                Retry
+                {retryBlockedUntil > Date.now() && retryCountdown > 0
+                  ? `Retry (in ${retryCountdown}s)`
+                  : "Retry"}
               </button>
             </div>
           </div>
         )}
 
         {result && (
-          <div className="space-y-8">
+          <section className="space-y-8" aria-labelledby="scan-results-heading">
+            <h2 id="scan-results-heading" className="sr-only">
+              Scan results
+            </h2>
             {result.cached && result.cachedAt && (
-              <div className="p-3 rounded-lg bg-zinc-800/40 border border-zinc-700/50 text-zinc-500 text-sm">
-                Showing cached results from{" "}
-                {(() => {
-                  try {
-                    const d = new Date(result.cachedAt);
-                    if (Number.isNaN(d.getTime())) return String(result.cachedAt);
-                    return d.toLocaleDateString(undefined, { dateStyle: "medium" });
-                  } catch {
-                    return String(result.cachedAt);
-                  }
-                })()}
-                . No new scan was run.
+              <div className="p-3 rounded-lg bg-zinc-800/40 border border-zinc-700/50 text-zinc-500 text-sm flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  Showing cached results from{" "}
+                  {(() => {
+                    try {
+                      const d = new Date(result.cachedAt);
+                      if (Number.isNaN(d.getTime())) return String(result.cachedAt);
+                      return d.toLocaleDateString(undefined, { dateStyle: "medium" });
+                    } catch {
+                      return String(result.cachedAt);
+                    }
+                  })()}
+                  . No new scan was run.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => doScan()}
+                  disabled={loading}
+                  className="px-3 py-1.5 rounded text-sm font-medium bg-zinc-600 hover:bg-zinc-500 text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2 focus:ring-offset-[var(--background)]"
+                >
+                  Run new scan
+                </button>
               </div>
             )}
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => downloadResultsPdf(result.resultA, result.resultB)}
-                className="px-4 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium border border-zinc-600 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2 focus:ring-offset-[var(--background)]"
-                aria-label="Download results as PDF"
-              >
-                Download PDF
-              </button>
-            </div>
-            <ResultsByCategory resultA={result.resultA} resultB={result.resultB} />
+            <ResultsByCategory
+              resultA={result.resultA}
+              resultB={result.resultB}
+              stickyHeader={
+                <>
+                  <button
+                    type="button"
+                    onClick={() => downloadResultsPdf(result.resultA, result.resultB)}
+                    className="px-4 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium border border-zinc-600 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2 focus:ring-offset-[var(--background)]"
+                    aria-label="Download results as PDF"
+                  >
+                    Download PDF
+                  </button>
+                </>
+              }
+            />
 
             <section className="px-4 py-3 border-t border-zinc-700/60">
               <h3 className="font-medium text-white text-sm mb-3">Structured data breakdown (JSON-LD only)</h3>
@@ -862,7 +927,10 @@ function HomeContent() {
               </section>
             )}
 
-            <section className={result.resultB ? "grid grid-cols-1 md:grid-cols-2 gap-8" : "space-y-8"}>
+            <section className={result.resultB ? "grid grid-cols-1 md:grid-cols-2 gap-8" : "space-y-8"} aria-labelledby="findings-heading">
+              <h3 id="findings-heading" className="sr-only">
+                Findings
+              </h3>
               <FindingsTable
                 findings={result.resultA.findings}
                 domainLabel={result.resultA.domain}
@@ -874,18 +942,30 @@ function HomeContent() {
                 />
               )}
             </section>
-          </div>
+          </section>
         )}
 
         {!result && !loading && (
           <p className="text-zinc-500 text-sm">
-            Enter at least one domain and click Scan, or two to Compare. Each site is checked by fetching the homepage,
-            IR paths (/investor, /ir), robots.txt, and sitemap (no deep crawl), then analyzed for
-            crawlability, structured data, parseability, freshness, and IR completeness.{" "}
-            <Link href="/methodology" className="text-emerald-400 hover:text-emerald-300 underline">
-              How we score
-            </Link>
-            .
+            {domainA.trim() ? (
+              <>
+                Add an optional second domain to compare, or click <strong className="text-zinc-400">Scan</strong> to analyze one site. Each site is checked by fetching the homepage, IR paths, robots.txt, and sitemap, then analyzed for crawlability, structured data, parseability, freshness, and IR completeness.{" "}
+                <Link href="/methodology" className="text-emerald-400 hover:text-emerald-300 underline">
+                  How we score
+                </Link>
+                .
+              </>
+            ) : (
+              <>
+                Enter at least one domain and click Scan, or two to Compare. Each site is checked by fetching the homepage,
+                IR paths (/investor, /ir), robots.txt, and sitemap (no deep crawl), then analyzed for
+                crawlability, structured data, parseability, freshness, and IR completeness.{" "}
+                <Link href="/methodology" className="text-emerald-400 hover:text-emerald-300 underline">
+                  How we score
+                </Link>
+                .
+              </>
+            )}
           </p>
         )}
 

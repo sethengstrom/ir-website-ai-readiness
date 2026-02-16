@@ -22,6 +22,9 @@ export default function MethodologyPage() {
           <p className="text-[var(--muted)] text-base mt-1">
             How we measure AI citation readiness and category scores
           </p>
+          <p className="text-[var(--muted)] text-sm mt-1">
+            Last updated: February 2025
+          </p>
         </div>
       </header>
 

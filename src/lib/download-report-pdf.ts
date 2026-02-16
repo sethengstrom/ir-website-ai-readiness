@@ -114,11 +114,17 @@ export function downloadResultsPdf(resultA: DomainResult, resultB: DomainResult 
   });
   y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
 
-  // Criteria (pass/fail) per category — like the page
+  // Criteria (pass/fail) per category — green ✓ = Pass, red ✗ = Fail
+  const GREEN_PASS = [34, 197, 94] as [number, number, number];
+  const RED_FAIL = [220, 38, 38] as [number, number, number];
+  const GRAY_NA = [63, 63, 70] as [number, number, number];
+  const WHITE = [255, 255, 255] as [number, number, number];
+
   doc.setFontSize(11);
   doc.text("Criteria (pass/fail by domain)", 14, y);
   doc.setFontSize(8);
-  doc.text("✓ = Pass, ✗ = Fail", 14, y + 5);
+  doc.setTextColor(0, 0, 0);
+  doc.text("Green ✓ = Pass, Red ✗ = Fail", 14, y + 5);
   y += 12;
 
   for (const { key, label } of CATEGORY_ITEMS) {
@@ -149,6 +155,7 @@ export function downloadResultsPdf(resultA: DomainResult, resultB: DomainResult 
     });
 
     const critHeaders = resultB ? ["Criterion", "Domain A", "Domain B"] : ["Criterion", "Pass/Fail"];
+    const passFailColIndices = resultB ? [1, 2] : [1];
     autoTable(doc, {
       startY: y,
       head: [critHeaders],
@@ -157,6 +164,23 @@ export function downloadResultsPdf(resultA: DomainResult, resultB: DomainResult 
       styles: { fontSize: 9 },
       headStyles: { fillColor: [63, 63, 70] },
       columnStyles: resultB ? { 0: { cellWidth: "auto" }, 1: { cellWidth: 22 }, 2: { cellWidth: 22 } } : { 0: { cellWidth: "auto" } },
+      didParseCell: (data) => {
+        if (data.section !== "body") return;
+        const colIdx = data.column.index;
+        if (!passFailColIndices.includes(colIdx)) return;
+        const raw = data.cell?.raw as string | undefined;
+        const text = (raw ?? String(data.cell?.text ?? "")).trim();
+        if (text === "✓") {
+          data.cell.styles.fillColor = GREEN_PASS;
+          data.cell.styles.textColor = WHITE;
+        } else if (text === "✗") {
+          data.cell.styles.fillColor = RED_FAIL;
+          data.cell.styles.textColor = WHITE;
+        } else {
+          data.cell.styles.fillColor = GRAY_NA;
+          data.cell.styles.textColor = WHITE;
+        }
+      },
     });
     y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
   }
@@ -263,8 +287,10 @@ export function downloadResultsPdf(resultA: DomainResult, resultB: DomainResult 
     { maxWidth: pageWidth - 28 }
   );
 
+  const safe = (s: string) => s.replace(/[^a-z0-9.-]/gi, "-").replace(/-+/g, "-").slice(0, 25);
+  const dateStr = new Date().toISOString().slice(0, 10);
   const filename = singleDomain
-    ? `IR-Readiness-${domainALabel.replace(/[^a-z0-9.-]/gi, "-").slice(0, 30)}.pdf`
-    : "IR-Readiness-Comparison.pdf";
+    ? `IR-Readiness-${safe(domainALabel)}-${dateStr}.pdf`
+    : `IR-Readiness-${safe(domainALabel)}-vs-${safe(domainBLabel)}-${dateStr}.pdf`;
   doc.save(filename);
 }
