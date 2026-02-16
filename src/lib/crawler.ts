@@ -14,9 +14,36 @@ const MAX_FOLLOWUP = 2;
 const USER_AGENT = "IR-AI-Readiness-Scanner/1.0";
 const RETRY_MAX = 2;
 const RETRY_BASE_MS = 500;
+/** Max response body size (2MB) to avoid OOM on very large pages. */
+const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Read response body up to maxBytes to avoid OOM on very large responses. */
+async function readTextWithLimit(res: Response, maxBytes: number): Promise<string> {
+  const reader = res.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (total < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > maxBytes) {
+        const take = value.length - (total - maxBytes);
+        chunks.push(value.subarray(0, take));
+        break;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const buf = Buffer.concat(chunks);
+  return new TextDecoder().decode(buf);
 }
 
 /** Match anchors/URLs for earnings-related targets (deterministic). */
@@ -190,7 +217,7 @@ async function fetchOne(
       const responseTimeMs = Date.now() - start;
       const contentType = res.headers.get("content-type") || "";
       const lastModified = res.headers.get("last-modified");
-      const body = await res.text();
+      const body = await readTextWithLimit(res, MAX_BODY_BYTES);
       lastResult = {
         status: res.status,
         contentType,

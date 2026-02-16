@@ -11,6 +11,7 @@ import type {
   InvestorQuestionStatus,
 } from "@/lib/types";
 import { AEO_INTRO, CATEGORY_CONTEXT, getFindingWhyItMatters, getCategoryFindingsForDomain } from "@/lib/aeo-context";
+import { messageForCode, isScanErrorCode } from "@/lib/scan-errors";
 
 async function runScan(domainA: string, domainB: string): Promise<{
   runId: string;
@@ -25,8 +26,12 @@ async function runScan(domainA: string, domainB: string): Promise<{
     body: JSON.stringify({ domainA: domainA.trim(), domainB: domainB.trim() }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Scan failed: ${res.status}`);
+    const data = await res.json().catch(() => ({}));
+    const msg = data.error || `Scan failed: ${res.status}`;
+    const code = data.code;
+    const err = new Error(msg) as Error & { code?: string };
+    if (code && isScanErrorCode(code)) err.code = code;
+    throw err;
   }
   return res.json();
 }
@@ -575,7 +580,10 @@ function HomeContent() {
         cachedAt: data.cachedAt,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Scan failed");
+      const e = err as Error & { code?: string };
+      const message =
+        e?.code && isScanErrorCode(e.code) ? messageForCode(e.code) : e instanceof Error ? e.message : "Scan failed";
+      setError(message);
     } finally {
       setScanProgress(100);
       setLoading(false);
