@@ -164,14 +164,14 @@ function CategoryRows({
             </span>
             <div className="min-w-0">
               <h3 className="font-medium text-white text-sm mb-1">{label}</h3>
-              <p className="text-xs text-zinc-400 leading-snug">
+              <p className="text-sm text-zinc-400 leading-snug">
                 {ctx.what} {ctx.why}
               </p>
-              <p className="text-xs text-zinc-500 mt-0.5">
+              <p className="text-sm text-zinc-500 mt-0.5">
                 <span className="font-medium text-zinc-500">Score:</span> {ctx.scoreMeaning}
               </p>
               {key === "structuredData" && (
-                <p className="text-xs text-zinc-500 mt-0.5">
+                <p className="text-sm text-zinc-500 mt-0.5">
                   <span className="font-medium text-zinc-500">This row:</span> Category score (includes feeds).
                   {singleDomain
                     ? ` JSON-LD only: ${resultA.structuredDataBreakdown?.structuredDataScore ?? "—"}`
@@ -183,7 +183,7 @@ function CategoryRows({
                   <button
                     type="button"
                     onClick={() => toggle(key)}
-                    className="text-xs font-medium text-zinc-500 hover:text-zinc-400 flex items-center gap-1 transition-colors"
+                    className="text-sm font-medium text-zinc-500 hover:text-zinc-400 flex items-center gap-1 transition-colors"
                     aria-expanded={isOpen}
                   >
                     <span className="text-zinc-500" aria-hidden>{isOpen ? "▼" : "▶"}</span>
@@ -192,8 +192,8 @@ function CategoryRows({
                   {isOpen && (
                     <div className={singleDomain ? "mt-1" : "mt-1 grid grid-cols-2 gap-4"}>
                       <div>
-                        {!singleDomain && <p className="text-xs font-medium text-zinc-500 mb-0.5">Domain A</p>}
-                        <ul className="text-xs text-zinc-400 space-y-1 list-none">
+                        {!singleDomain && <p className="text-sm font-medium text-zinc-500 mb-0.5">Domain A</p>}
+                        <ul className="text-sm text-zinc-400 space-y-1 list-none">
                           {criteriaA.map(({ label: l, passed, improvement }, i) => (
                             <li key={i} className="flex gap-1.5 items-start">
                               <span className="shrink-0 mt-0.5" aria-hidden>
@@ -215,8 +215,8 @@ function CategoryRows({
                       </div>
                       {!singleDomain && (
                         <div>
-                          <p className="text-xs font-medium text-zinc-500 mb-0.5">Domain B</p>
-                          <ul className="text-xs text-zinc-400 space-y-1 list-none">
+                          <p className="text-sm font-medium text-zinc-500 mb-0.5">Domain B</p>
+                        <ul className="text-sm text-zinc-400 space-y-1 list-none">
                             {criteriaB.map(({ label: l, passed, improvement }, i) => (
                               <li key={i} className="flex gap-1.5 items-start">
                                 <span className="shrink-0 mt-0.5" aria-hidden>
@@ -281,17 +281,17 @@ function ResultsByCategory({
             <span className="text-sm font-medium text-white truncate block" title={resultA.domain}>
               {resultA.domain}
             </span>
-            <span className="text-xs text-zinc-500">
+            <span className="text-sm text-zinc-500">
               overall · {resultA.crawledPageCount} pages
             </span>
           </div>
         </div>
         <div className={`flex flex-col items-center gap-1 min-w-0 ${singleDomain ? "" : "col-span-2 md:col-span-1"} md:min-w-[7rem] order-1 md:order-2`}>
-          <span className="text-xs text-zinc-500 font-medium flex items-center gap-1.5 flex-wrap justify-center">
+          <span className="text-sm text-zinc-500 font-medium flex items-center gap-1.5 flex-wrap justify-center">
             Overall readiness
             <Link
               href="/methodology"
-              className="text-[10px] text-emerald-400/80 hover:text-emerald-400 underline"
+              className="text-sm text-emerald-400/80 hover:text-emerald-400 underline"
             >
               How we score
             </Link>
@@ -309,7 +309,7 @@ function ResultsByCategory({
               </>
             )}
           </div>
-          <span className="text-[10px] text-zinc-500">
+          <span className="text-sm text-zinc-500">
             AI Citation: {resultA.aiCitationReadiness ?? "—"}
             {!singleDomain && ` vs ${resultB!.aiCitationReadiness ?? "—"}`}
           </span>
@@ -330,9 +330,9 @@ function ResultsByCategory({
               <span className="text-sm font-medium text-white truncate block" title={resultB!.domain}>
                 {resultB!.domain}
               </span>
-              <span className="text-xs text-zinc-500">
-                overall · {resultB!.crawledPageCount} pages
-              </span>
+            <span className="text-sm text-zinc-500">
+              overall · {resultB!.crawledPageCount} pages
+            </span>
             </div>
           </div>
         )}
@@ -358,31 +358,31 @@ function StructuredDataBreakdownCard({
     return (
       <div className="rounded-lg border border-zinc-700/60 bg-zinc-800/30 p-4">
         <h4 className="font-medium text-white text-sm mb-2">{domainLabel}</h4>
-        <p className="text-xs text-zinc-500">No structured data breakdown.</p>
+        <p className="text-sm text-zinc-500">No structured data breakdown.</p>
       </div>
     );
   }
   return (
     <div className="rounded-lg border border-zinc-700/60 bg-zinc-800/30 p-4">
       <h4 className="font-medium text-white text-sm mb-2">{domainLabel}</h4>
-      <p className="text-xs text-zinc-500 mb-2">
+      <p className="text-sm text-zinc-500 mb-2">
         <span className="font-medium text-zinc-400">JSON-LD blocks:</span> {breakdown.jsonLdBlockCount}
       </p>
       {breakdown.detectedTypes.length > 0 ? (
-        <p className="text-xs text-zinc-500 mb-2">
+        <p className="text-sm text-zinc-500 mb-2">
           <span className="font-medium text-zinc-400">Detected @type:</span>{" "}
           <span className="text-zinc-300">{breakdown.detectedTypes.join(", ")}</span>
         </p>
       ) : (
-        <p className="text-xs text-zinc-500 mb-2">No schema types detected.</p>
+        <p className="text-sm text-zinc-500 mb-2">No schema types detected.</p>
       )}
       {breakdown.missingRecommendedTypes.length > 0 ? (
-        <p className="text-xs text-zinc-500">
+        <p className="text-sm text-zinc-500">
           <span className="font-medium text-amber-500/90">Missing recommended:</span>{" "}
           <span className="text-zinc-400">{breakdown.missingRecommendedTypes.join(", ")}</span>
         </p>
       ) : (
-        <p className="text-xs text-emerald-500/90">All recommended IR schema types present.</p>
+        <p className="text-sm text-emerald-500/90">All recommended IR schema types present.</p>
       )}
     </div>
   );
@@ -428,7 +428,7 @@ function InvestorQuestionTable({
     <div className="rounded-xl border border-zinc-700/60 bg-zinc-900/40 overflow-hidden">
       <div className="px-4 py-3 border-b border-zinc-700/60 bg-zinc-800/30">
         <h3 className="font-medium text-white text-sm">Investor question coverage (AI answerability)</h3>
-        <p className="text-xs text-zinc-500 mt-0.5">
+        <p className="text-sm text-zinc-500 mt-0.5">
           Pass/fail per question with evidence and source URL. ✓ Answerable, ◐ Partial, — Not answerable.
         </p>
       </div>
@@ -473,8 +473,8 @@ function InvestorQuestionTable({
                     <td className="w-8 px-4 py-2 text-zinc-500 tabular-nums">{i + 1}</td>
                     <td className="min-w-[180px] px-4 py-2 text-zinc-300">{ra.question}</td>
                     <td className={`px-4 py-2 font-medium border-l border-zinc-700/60 bg-emerald-950/20 ${statusColorClass(ra.status)}`}>{statusLabel(ra.status)}</td>
-                    <td className="px-4 py-2 text-zinc-400 text-xs bg-emerald-950/20">
-                      {ra.pageType && <span className="block text-[10px] text-zinc-500 uppercase tracking-wide mb-0.5">{ra.pageType}</span>}
+                    <td className="px-4 py-2 text-zinc-400 text-sm bg-emerald-950/20">
+                      {ra.pageType && <span className="block text-xs text-zinc-500 uppercase tracking-wide mb-0.5">{ra.pageType}</span>}
                       {ra.evidenceSnippet && <span className="block truncate max-w-[200px]" title={ra.evidenceSnippet}>{ra.evidenceSnippet}</span>}
                       {ra.sourceUrl && (
                         <a href={ra.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-400/80 hover:underline truncate block max-w-[200px]">
@@ -493,8 +493,8 @@ function InvestorQuestionTable({
                     <td className="sticky left-0 z-10 w-8 bg-zinc-900/40 group-hover:bg-zinc-800/40 px-4 py-2 text-zinc-500 tabular-nums">{i + 1}</td>
                     <td className="sticky left-[4rem] z-10 min-w-[180px] bg-zinc-900/40 group-hover:bg-zinc-800/40 px-4 py-2 text-zinc-300 shadow-[2px_0_4px_rgba(0,0,0,0.15)]">{ra.question}</td>
                     <td className={`px-4 py-2 font-medium border-l border-zinc-700/60 bg-emerald-950/20 ${statusColorClass(ra.status)}`}>{statusLabel(ra.status)}</td>
-                    <td className="px-4 py-2 text-zinc-400 text-xs bg-emerald-950/20">
-                      {ra.pageType && <span className="block text-[10px] text-zinc-500 uppercase tracking-wide mb-0.5">{ra.pageType}</span>}
+                    <td className="px-4 py-2 text-zinc-400 text-sm bg-emerald-950/20">
+                      {ra.pageType && <span className="block text-xs text-zinc-500 uppercase tracking-wide mb-0.5">{ra.pageType}</span>}
                       {ra.evidenceSnippet && <span className="block truncate max-w-[200px]" title={ra.evidenceSnippet}>{ra.evidenceSnippet}</span>}
                       {ra.sourceUrl && (
                         <a href={ra.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-400/80 hover:underline truncate block max-w-[200px]">
@@ -506,8 +506,8 @@ function InvestorQuestionTable({
                     <td className={`px-4 py-2 font-medium border-l-2 border-zinc-600 bg-amber-950/10 ${rb ? statusColorClass(rb.status) : "text-zinc-500"}`}>
                       {rb ? statusLabel(rb.status) : "—"}
                     </td>
-                    <td className="px-4 py-2 text-zinc-400 text-xs bg-amber-950/10">
-                      {rb?.pageType && <span className="block text-[10px] text-zinc-500 uppercase tracking-wide mb-0.5">{rb.pageType}</span>}
+                    <td className="px-4 py-2 text-zinc-400 text-sm bg-amber-950/10">
+                      {rb?.pageType && <span className="block text-xs text-zinc-500 uppercase tracking-wide mb-0.5">{rb.pageType}</span>}
                       {rb?.evidenceSnippet && <span className="block truncate max-w-[200px]" title={rb.evidenceSnippet}>{rb.evidenceSnippet}</span>}
                       {rb?.sourceUrl && (
                         <a href={rb.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-400/80 hover:underline truncate block max-w-[200px]">
@@ -585,7 +585,7 @@ function FindingsTable({ findings, domainLabel }: { findings: Finding[]; domainL
                     <button
                       type="button"
                       onClick={() => setOpenWhyRow(openWhyRow === i ? null : i)}
-                      className="text-xs text-emerald-400/90 hover:text-emerald-300 underline focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2 focus:ring-offset-zinc-900 rounded"
+                      className="text-sm text-emerald-400/90 hover:text-emerald-300 underline focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2 focus:ring-offset-zinc-900 rounded"
                       aria-expanded={openWhyRow === i}
                       aria-controls={openWhyRow === i ? `finding-why-${i}` : undefined}
                     >
@@ -595,7 +595,7 @@ function FindingsTable({ findings, domainLabel }: { findings: Finding[]; domainL
                 </tr>
                 {openWhyRow === i && (
                   <tr id={`finding-why-${i}`} className="border-t border-zinc-700/30 bg-zinc-800/50" role="region" aria-label="Why it matters for AEO">
-                    <td colSpan={6} className="px-4 py-3 text-zinc-400 text-xs leading-relaxed">
+                    <td colSpan={6} className="px-4 py-3 text-zinc-400 text-sm leading-relaxed">
                       <span className="text-zinc-500 font-medium">Why it matters for AEO: </span>
                       {getFindingWhyItMatters(f.category, f.subcategory)}
                     </td>
@@ -694,8 +694,8 @@ function HomeContent() {
           <div className="mt-4 p-4 rounded-lg bg-[var(--card)]/50 border border-[var(--card-border)] text-sm">
             <h2 className="font-semibold text-[var(--foreground)] mb-1">{AEO_INTRO.title}</h2>
             <p className="text-[var(--muted)] mb-2">{AEO_INTRO.body}</p>
-            <p className="text-[var(--muted)] text-xs opacity-90">{AEO_INTRO.scoreMeaning}</p>
-            <p className="text-[var(--muted)] text-xs mt-2">
+            <p className="text-[var(--muted)] text-sm opacity-90">{AEO_INTRO.scoreMeaning}</p>
+            <p className="text-[var(--muted)] text-sm mt-2">
               <Link href="/methodology" className="text-emerald-400 hover:text-emerald-300 underline">
                 How we score →
               </Link>
@@ -725,7 +725,7 @@ function HomeContent() {
                   type="button"
                   onClick={() => setDomainA(url)}
                   disabled={loading}
-                  className="px-2.5 py-1 rounded text-xs font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-200 disabled:opacity-50 transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2 focus:ring-offset-[var(--background)]"
+                  className="px-2.5 py-1 rounded text-sm font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-200 disabled:opacity-50 transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2 focus:ring-offset-[var(--background)]"
                   aria-label={`Use ${name} as Domain A`}
                 >
                   {name}
@@ -759,7 +759,7 @@ function HomeContent() {
                   type="button"
                   onClick={() => setDomainB(url)}
                   disabled={loading}
-                  className="px-2.5 py-1 rounded text-xs font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-200 disabled:opacity-50 transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2 focus:ring-offset-[var(--background)]"
+                  className="px-2.5 py-1 rounded text-sm font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-200 disabled:opacity-50 transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2 focus:ring-offset-[var(--background)]"
                   aria-label={`Use ${name} as Domain B`}
                 >
                   {name}
@@ -896,10 +896,10 @@ function HomeContent() {
           >
             Scoring methodology
           </Link>
-          <p className="text-zinc-500 text-xs mt-1">
+          <p className="text-zinc-500 text-sm mt-1">
             How we calculate Overall readiness, AI Citation Readiness, category scores, and investor question coverage.
           </p>
-          <p className="text-zinc-500 text-xs mt-1">
+          <p className="text-zinc-500 text-sm mt-1">
             Scans are rate-limited; results may be cached.
           </p>
         </footer>
