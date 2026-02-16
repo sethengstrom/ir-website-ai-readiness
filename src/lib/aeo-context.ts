@@ -103,7 +103,7 @@ const FINDING_WHY: Record<string, string> = {
   "freshness|dates":
     "Visible dates on press releases and events let agents know how current each item is, so they prefer recent content in answers.",
   "freshness|archive":
-    "Archive or “all releases” pages show agents you maintain historical content and give them a single place to discover past items.",
+    "When users ask about a past quarter or an older release (e.g. Q2 results or last year's earnings), the LLM needs a way to find that content. Archive or all releases / past events pages give it a discoverable list so it can pick the right item and cite it instead of only finding the latest.",
   "irchecklist|checklist":
     "Each item (filings, presentation, press, events, contact, governance) gives agents an authoritative place to link to when answering investor questions.",
   "response|http":
