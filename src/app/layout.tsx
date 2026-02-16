@@ -12,7 +12,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var d=typeof document!=='undefined'?document:null;var s=typeof localStorage!=='undefined'?localStorage:null;if(d&&s){var t=s.getItem('ir-theme');d.documentElement.dataset.theme=(t==='light')?'light':'dark';}})();`,
+          }}
+        />
+      </head>
       <body className="antialiased min-h-screen font-sans">
         {children}
       </body>

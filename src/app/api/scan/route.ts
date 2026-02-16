@@ -117,46 +117,92 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const scanPromise = (async () => {
-      const [crawlResultA, crawlResultB] = await Promise.all([
-        crawlDomain(domainA),
-        crawlDomain(domainB),
-      ]);
-      const resultA = analyzeDomain(crawlResultA);
-      const resultB = analyzeDomain(crawlResultB);
-      return { crawlResultA, crawlResultB, resultA, resultB };
-    })();
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const send = (obj: object) =>
+          controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
 
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error("SCAN_TIMEOUT")), SCAN_TIMEOUT_MS);
-    });
+        try {
+          send({
+            type: "progress",
+            phase: "crawling",
+            message: "Crawling Domain A & B…",
+            progress: 15,
+          });
 
-    const { resultA, resultB } = await Promise.race([scanPromise, timeoutPromise])
-      .then((out) => out)
-      .catch((e) => {
-        if (e instanceof Error && e.message === "SCAN_TIMEOUT") {
-          const err = new Error(messageForCode(SCAN_ERROR_CODES.CRAWL_TIMEOUT));
-          (err as Error & { code: string }).code = SCAN_ERROR_CODES.CRAWL_TIMEOUT;
-          throw err;
+          const crawlPromise = Promise.all([
+            crawlDomain(domainA),
+            crawlDomain(domainB),
+          ]);
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("SCAN_TIMEOUT")), SCAN_TIMEOUT_MS)
+          );
+          const [crawlResultA, crawlResultB] = await Promise.race([
+            crawlPromise,
+            timeoutPromise,
+          ]);
+
+          send({
+            type: "progress",
+            phase: "analyzing",
+            message: "Analyzing crawlability, structure & content…",
+            progress: 50,
+          });
+
+          const resultA = analyzeDomain(crawlResultA);
+          const resultB = analyzeDomain(crawlResultB);
+
+          await prisma.scanRun.update({
+            where: { id: run.id },
+            data: {
+              status: "completed",
+              finishedAt: new Date(),
+              resultA: JSON.stringify(resultA),
+              resultB: JSON.stringify(resultB),
+            },
+          });
+
+          send({
+            type: "done",
+            runId: run.id,
+            resultA,
+            resultB,
+            cached: false,
+            progress: 100,
+          });
+        } catch (e) {
+          const err = e as Error & { code?: string };
+          if (err instanceof Error && err.message === "SCAN_TIMEOUT") {
+            send({
+              type: "error",
+              code: SCAN_ERROR_CODES.CRAWL_TIMEOUT,
+              message: messageForCode(SCAN_ERROR_CODES.CRAWL_TIMEOUT),
+            });
+          } else if (err.code && isScanErrorCode(err.code)) {
+            send({
+              type: "error",
+              code: err.code,
+              message: err.message || messageForCode(err.code),
+            });
+          } else {
+            send({
+              type: "error",
+              code: SCAN_ERROR_CODES.ANALYZER_ERROR,
+              message: err instanceof Error ? err.message : messageForCode(SCAN_ERROR_CODES.SCAN_FAILED),
+            });
+          }
+        } finally {
+          controller.close();
         }
-        throw e;
-      });
-
-    await prisma.scanRun.update({
-      where: { id: run.id },
-      data: {
-        status: "completed",
-        finishedAt: new Date(),
-        resultA: JSON.stringify(resultA),
-        resultB: JSON.stringify(resultB),
       },
     });
 
-    return NextResponse.json({
-      runId: run.id,
-      resultA,
-      resultB,
-      cached: false,
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "application/x-ndjson",
+        "Cache-Control": "no-store",
+      },
     });
   } catch (e) {
     console.error("Scan error:", e);

@@ -13,7 +13,13 @@ import type {
 import { AEO_INTRO, CATEGORY_CONTEXT, getFindingWhyItMatters, getCategoryFindingsForDomain } from "@/lib/aeo-context";
 import { messageForCode, isScanErrorCode } from "@/lib/scan-errors";
 
-async function runScan(domainA: string, domainB: string): Promise<{
+type ScanProgressEvent = { phase: string; message: string; progress: number };
+
+async function runScan(
+  domainA: string,
+  domainB: string,
+  onProgress?: (event: ScanProgressEvent) => void
+): Promise<{
   runId: string;
   resultA: DomainResult;
   resultB: DomainResult;
@@ -33,6 +39,58 @@ async function runScan(domainA: string, domainB: string): Promise<{
     if (code && isScanErrorCode(code)) err.code = code;
     throw err;
   }
+
+  const contentType = res.headers.get("Content-Type") ?? "";
+  if (contentType.includes("application/x-ndjson")) {
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("No response body");
+    const dec = new TextDecoder();
+    let buffer = "";
+    let donePayload: {
+      runId: string;
+      resultA: DomainResult;
+      resultB: DomainResult;
+      cached?: boolean;
+      cachedAt?: string;
+    } | null = null;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += dec.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const data = JSON.parse(line) as Record<string, unknown>;
+          if (data.type === "progress" && typeof data.message === "string" && typeof data.progress === "number") {
+            onProgress?.({ phase: String(data.phase ?? ""), message: data.message, progress: data.progress });
+          } else if (data.type === "done") {
+            donePayload = {
+              runId: String(data.runId ?? ""),
+              resultA: data.resultA as DomainResult,
+              resultB: data.resultB as DomainResult,
+              cached: data.cached === true,
+              cachedAt: typeof data.cachedAt === "string" ? data.cachedAt : undefined,
+            };
+          } else if (data.type === "error") {
+            const code = data.code as string | undefined;
+            const message = (data.message as string) || "Scan failed";
+            const err = new Error(message) as Error & { code?: string };
+            if (code && isScanErrorCode(code)) err.code = code;
+            throw err;
+          }
+        } catch (e) {
+          const err = e as Error & { code?: string };
+          if (err instanceof Error && err.message !== "Scan failed" && !err.code) throw new Error("Invalid stream");
+          throw e;
+        }
+      }
+    }
+    if (!donePayload) throw new Error("Scan failed");
+    return donePayload;
+  }
+
   return res.json();
 }
 
@@ -217,7 +275,15 @@ function ResultsByCategory({
           </div>
         </div>
         <div className="flex flex-col items-center gap-1 min-w-[7rem]">
-          <span className="text-xs text-zinc-500 font-medium">Overall readiness</span>
+          <span className="text-xs text-zinc-500 font-medium flex items-center gap-1.5 flex-wrap justify-center">
+            Overall readiness
+            <Link
+              href="/methodology"
+              className="text-[10px] text-emerald-400/80 hover:text-emerald-400 underline"
+            >
+              How we score
+            </Link>
+          </span>
           <div className="flex items-center gap-6">
             <span className={`text-5xl font-bold tabular-nums w-14 text-right ${scoreColorClass(resultA.overallScore)}`}>
               {resultA.overallScore}
@@ -510,63 +576,46 @@ function HomeContent() {
 
   const [scanProgress, setScanProgress] = useState(0);
   const [scanStatusMessage, setScanStatusMessage] = useState("");
-  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const statusIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
 
-  // Auto-fill Domain A from URL query: ?domainA=https://example.com
+  useEffect(() => {
+    const t = typeof localStorage !== "undefined" ? localStorage.getItem("ir-theme") : null;
+    if (t === "light") {
+      setTheme("light");
+      document.documentElement.dataset.theme = "light";
+    } else {
+      setTheme("dark");
+      document.documentElement.dataset.theme = "dark";
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    localStorage.setItem("ir-theme", next);
+    document.documentElement.dataset.theme = next;
+  };
+
+  // Auto-fill from URL: ?domainA=... and ?domainB=...
   useEffect(() => {
     const a = searchParams.get("domainA");
+    const b = searchParams.get("domainB");
     if (a != null && String(a).trim() !== "") setDomainA(String(a).trim());
+    if (b != null && String(b).trim() !== "") setDomainB(String(b).trim());
   }, [searchParams]);
 
-  const SCAN_STATUS_MESSAGES = [
-    "Checking robots.txt & sitemaps…",
-    "Crawling Domain A…",
-    "Crawling Domain B…",
-    "Analyzing crawlability & structure…",
-    "Analyzing content & IR checklist…",
-    "Almost there…",
-  ];
-
-  useEffect(() => {
-    if (!loading) {
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-        progressIntervalRef.current = null;
-      }
-      if (statusIntervalRef.current) {
-        clearInterval(statusIntervalRef.current);
-        statusIntervalRef.current = null;
-      }
-      return;
-    }
-    setScanProgress(0);
-    setScanStatusMessage(SCAN_STATUS_MESSAGES[0]);
-    let statusIndex = 0;
-    statusIntervalRef.current = setInterval(() => {
-      statusIndex = (statusIndex + 1) % SCAN_STATUS_MESSAGES.length;
-      setScanStatusMessage(SCAN_STATUS_MESSAGES[statusIndex]);
-    }, 4500);
-    progressIntervalRef.current = setInterval(() => {
-      setScanProgress((p) => (p >= 90 ? 90 : p + 6));
-    }, 2500);
-    return () => {
-      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-      if (statusIntervalRef.current) clearInterval(statusIntervalRef.current);
-    };
-  }, [loading]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const doScan = async () => {
     setError(null);
-    setResult(null);
-    if (!domainA.trim() || !domainB.trim()) {
-      setError("Enter both Domain A and Domain B.");
-      return;
-    }
     setLoading(true);
+    setScanProgress(0);
+    setScanStatusMessage("Starting scan…");
     try {
-      const data = await runScan(domainA, domainB);
+      const data = await runScan(domainA, domainB, (event) => {
+        setScanStatusMessage(event.message);
+        setScanProgress(event.progress);
+      });
+      setScanProgress(100);
+      setScanStatusMessage("Done");
       setResult({
         resultA: data.resultA,
         resultB: data.resultB,
@@ -579,23 +628,44 @@ function HomeContent() {
         e?.code && isScanErrorCode(e.code) ? messageForCode(e.code) : e instanceof Error ? e.message : "Scan failed";
       setError(message);
     } finally {
-      setScanProgress(100);
       setLoading(false);
     }
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!domainA.trim() || !domainB.trim()) {
+      setError("Enter both Domain A and Domain B.");
+      return;
+    }
+    setResult(null);
+    await doScan();
+  };
+
   return (
-    <div className="min-h-screen bg-[#0f0f12] text-zinc-200">
-      <header className="border-b border-zinc-800 py-6">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
+      <header className="border-b border-[var(--card-border)] py-6">
         <div className="max-w-7xl mx-auto px-4">
-          <h1 className="text-2xl font-bold text-white">IR AI Readiness Scanner</h1>
-          <p className="text-zinc-500 text-sm mt-1">
-            Compare two domains for investor relations AI/agent retrieval signals
-          </p>
-          <div className="mt-4 p-4 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm">
-            <h2 className="font-semibold text-zinc-200 mb-1">{AEO_INTRO.title}</h2>
-            <p className="text-zinc-400 mb-2">{AEO_INTRO.body}</p>
-            <p className="text-zinc-500 text-xs">{AEO_INTRO.scoreMeaning}</p>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-[var(--foreground)]">IR AI Readiness Scanner</h1>
+              <p className="text-[var(--muted)] text-sm mt-1">
+                Compare two domains for investor relations AI/agent retrieval signals
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium bg-[var(--card)] border border-[var(--card-border)] text-[var(--foreground)] hover:opacity-90 transition-opacity"
+              aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+            >
+              {theme === "dark" ? "Light" : "Dark"}
+            </button>
+          </div>
+          <div className="mt-4 p-4 rounded-lg bg-[var(--card)]/50 border border-[var(--card-border)] text-sm">
+            <h2 className="font-semibold text-[var(--foreground)] mb-1">{AEO_INTRO.title}</h2>
+            <p className="text-[var(--muted)] mb-2">{AEO_INTRO.body}</p>
+            <p className="text-[var(--muted)] text-xs opacity-90">{AEO_INTRO.scoreMeaning}</p>
           </div>
         </div>
       </header>
@@ -675,8 +745,24 @@ function HomeContent() {
         )}
 
         {error && (
-          <div className="mb-6 p-4 rounded-lg bg-red-950/40 border border-red-800/60 text-red-200">
-            {error}
+          <div className="mb-6 p-4 rounded-lg bg-red-950/40 border border-red-800/60 text-red-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <span className="min-w-0">{error}</span>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setError(null)}
+                className="px-3 py-1.5 rounded text-sm font-medium bg-red-900/50 hover:bg-red-900/70 text-red-100 transition-colors"
+              >
+                Dismiss
+              </button>
+              <button
+                type="button"
+                onClick={() => { setError(null); doScan(); }}
+                className="px-3 py-1.5 rounded text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+              >
+                Retry
+              </button>
+            </div>
           </div>
         )}
 
@@ -746,7 +832,7 @@ function HomeContent() {
           </p>
         )}
 
-        <footer className="mt-10 pt-6 border-t border-zinc-800">
+        <footer className="mt-10 pt-6 border-t border-[var(--card-border)]">
           <Link
             href="/methodology"
             className="text-sm text-emerald-400 hover:text-emerald-300 underline focus:outline-none focus:ring-2 focus:ring-emerald-500/50 rounded"
@@ -766,7 +852,7 @@ export default function Home() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#0f0f12] flex items-center justify-center text-zinc-400">
+        <div className="min-h-screen bg-[var(--background)] flex items-center justify-center text-[var(--muted)]">
           Loading…
         </div>
       }

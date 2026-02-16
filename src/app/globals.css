@@ -2,13 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+:root,
+[data-theme="dark"] {
   --background: #0f0f12;
   --foreground: #e8e6e3;
   --card: #18181c;
+  --card-border: #3f3f46;
   --muted: #71717a;
   --accent: #22c55e;
   --accent-dim: #16a34a;
+}
+
+[data-theme="light"] {
+  --background: #f4f4f5;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-border: #e4e4e7;
+  --muted: #52525b;
+  --accent: #16a34a;
+  --accent-dim: #15803d;
 }
 
 body {
