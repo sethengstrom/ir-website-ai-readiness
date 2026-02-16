@@ -98,7 +98,7 @@ export default function MethodologyPage() {
             <li><strong className="text-zinc-300">Crawlability (20%)</strong> — robots.txt reachable, /investors and /investor-relations not disallowed, sitemap reachable, IR-related URLs discovered.</li>
             <li><strong className="text-zinc-300">Structured data (20%)</strong> — JSON-LD schema types (Organization, WebPage, Event, etc.), machine-readable dates, Organization identity, RSS/Atom feeds. The “Structured Data Score” shown in the UI is JSON-LD only (no feeds).</li>
             <li><strong className="text-zinc-300">Parseability (20%)</strong> — Server-rendered text length, main-content ratio, H1/H2 structure, canonical URL, title and meta description.</li>
-            <li><strong className="text-zinc-300">Recency &amp; dates (15%)</strong> — Earnings/results hub detected, visible date on that hub (so AI can cite recency), dates on other pages, archive/releases-style URLs.</li>
+            <li><strong className="text-zinc-300">Freshness (15%)</strong> — Earnings/results hub detected, visible or schema date on that hub (so AI can cite recency), dates on other pages, archive/releases-style URLs.</li>
             <li><strong className="text-zinc-300">IR checklist (25%)</strong> — Presence of filings (SEC/EDGAR or SEDAR+), investor presentation, press releases, events/webcasts, IR contact, governance/ESG links.</li>
           </ul>
           <p className="text-zinc-400 text-sm leading-relaxed">

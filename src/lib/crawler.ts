@@ -12,6 +12,12 @@ const FETCH_TIMEOUT_MS = 8000;
 const MAX_PHASE1 = 4;
 const MAX_FOLLOWUP = 2;
 const USER_AGENT = "IR-AI-Readiness-Scanner/1.0";
+const RETRY_MAX = 2;
+const RETRY_BASE_MS = 500;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /** Match anchors/URLs for earnings-related targets (deterministic). */
 const EARNINGS_LINK_PATTERN = /earnings|results|quarterly|q1|q2|q3|q4|fy\d|press-release|release|webcast|replay|transcript|prepared-remarks|financials|quarter/i;
@@ -139,6 +145,10 @@ function extractEarningsCandidates(html: string, baseOrigin: string): string[] {
   return scored.map((s) => s.url).slice(0, 5);
 }
 
+function shouldRetry(status: number): boolean {
+  return status === 0 || (status >= 500 && status <= 599);
+}
+
 async function fetchOne(
   url: string,
   acceptHtmlOnly: boolean
@@ -149,34 +159,58 @@ async function fetchOne(
   responseTimeMs: number;
   lastModified: string | null;
 }> {
-  const start = Date.now();
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": USER_AGENT },
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    const responseTimeMs = Date.now() - start;
-    const contentType = res.headers.get("content-type") || "";
-    const lastModified = res.headers.get("last-modified");
-    const body = await res.text();
-    if (acceptHtmlOnly && !contentType.includes("text/html") && !contentType.includes("application/xhtml")) {
-      return { status: res.status, contentType, body: "", responseTimeMs, lastModified };
+  let lastResult: {
+    status: number;
+    contentType: string;
+    body: string;
+    responseTimeMs: number;
+    lastModified: string | null;
+  } = {
+    status: 0,
+    contentType: "",
+    body: "",
+    responseTimeMs: 0,
+    lastModified: null,
+  };
+
+  for (let attempt = 0; attempt <= RETRY_MAX; attempt++) {
+    if (attempt > 0) {
+      const backoffMs = RETRY_BASE_MS * Math.pow(2, attempt - 1);
+      await sleep(backoffMs);
     }
-    return { status: res.status, contentType, body, responseTimeMs, lastModified };
-  } catch (e) {
-    clearTimeout(timeoutId);
-    const responseTimeMs = Date.now() - start;
-    return {
-      status: 0,
-      contentType: "",
-      body: "",
-      responseTimeMs,
-      lastModified: null,
-    };
+    const start = Date.now();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, {
+        headers: { "User-Agent": USER_AGENT },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      const responseTimeMs = Date.now() - start;
+      const contentType = res.headers.get("content-type") || "";
+      const lastModified = res.headers.get("last-modified");
+      const body = await res.text();
+      lastResult = {
+        status: res.status,
+        contentType,
+        body: res.ok ? body : "",
+        responseTimeMs,
+        lastModified,
+      };
+      if (!shouldRetry(res.status)) return lastResult;
+    } catch {
+      clearTimeout(timeoutId);
+      lastResult = {
+        status: 0,
+        contentType: "",
+        body: "",
+        responseTimeMs: Date.now() - start,
+        lastModified: null,
+      };
+    }
   }
+  return lastResult;
 }
 
 export async function crawlDomain(domainInput: string): Promise<CrawlResult> {

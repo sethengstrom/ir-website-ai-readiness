@@ -56,7 +56,7 @@ export const CATEGORY_CONTEXT: Record<
     improvements: [
       "Add a clear earnings or financial results hub (terms like earnings, results, quarter, webcast, transcript).",
       "Show a visible date on the earnings hub page (e.g. YYYY-MM-DD or 'Q3 2025') so AI can cite recency.",
-      "Show visible dates on press releases and event pages.",
+      "Show visible dates (e.g. YYYY-MM-DD) or datePublished/dateModified in JSON-LD on press releases and event pages.",
       "Provide archive or all releases / past events pages (URLs containing archive, releases, or events).",
     ],
   },
@@ -176,8 +176,8 @@ const IMPROVEMENT_TRIGGERS: Record<
   ],
   freshness: [
     { triggers: ["earnings", "hub", "results"], improvement: "Add a clear earnings or financial results hub (terms like earnings, results, quarter, webcast)." },
-    { triggers: ["earnings hub page has no visible date", "visible date"], improvement: "Show a visible date on the earnings hub page (e.g. YYYY-MM-DD or Q3 2025) so AI can cite recency." },
-    { triggers: ["dates", "pages with dates"], improvement: "Show visible dates (e.g. YYYY-MM-DD) on press releases and event pages." },
+    { triggers: ["earnings hub page has no visible date", "no visible or schema date", "visible date"], improvement: "Show a visible date on the earnings hub page (e.g. YYYY-MM-DD or Q3 2025) or add datePublished/dateModified in JSON-LD so AI can cite recency." },
+    { triggers: ["dates", "pages with dates"], improvement: "Show visible dates (e.g. YYYY-MM-DD) or add datePublished/dateModified in JSON-LD on press releases and event pages." },
     { triggers: ["archive", "releases", "events"], improvement: "Provide archive or all releases / past events pages (URLs containing archive, releases, or events)." },
   ],
   irChecklist: [

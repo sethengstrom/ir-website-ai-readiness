@@ -3,7 +3,7 @@ import type { CrawlPage } from "../crawler";
 import type { Finding } from "../types";
 
 /**
- * Freshness / Recency & dates: signals that help AI cite current, dated IR content.
+ * Freshness: signals that help AI cite current, dated IR content.
  * - Earnings hub: can AI find the page it needs for "latest earnings" answers?
  * - Dates on that hub and on other pages: can AI say "as of Q3 2025" and avoid stale citations?
  * - Archive/releases structure: can AI discover past content when needed?
@@ -96,11 +96,74 @@ function pageMatchesEarningsHub(url: string, html: string): boolean {
   return score >= EARNINGS_HUB_THRESHOLD;
 }
 
-function pageHasVisibleDate(html: string): boolean {
-  const DATE_REGEX = /\b(20\d{2})[-/](0?[1-9]|1[0-2])[-/](0?[1-9]|[12]\d|3[01])\b|\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+20\d{2}\b/gi;
+/** True if body text contains a visible date (YYYY-MM-DD or "Jan 15, 2025" style). */
+function pageHasVisibleDateInText(html: string): boolean {
+  const re = /\b(20\d{2})[-/](0?[1-9]|1[0-2])[-/](0?[1-9]|[12]\d|3[01])\b|\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+20\d{2}\b/gi;
   const text = cheerio.load(html)("body").text() || "";
-  DATE_REGEX.lastIndex = 0;
-  return DATE_REGEX.test(text);
+  re.lastIndex = 0;
+  return re.test(text);
+}
+
+/** True if any JSON-LD on the page has datePublished, dateModified, or dateCreated. */
+function pageHasSchemaDates(html: string): boolean {
+  const $ = cheerio.load(html);
+  function hasDateFields(obj: unknown): boolean {
+    if (!obj || typeof obj !== "object") return false;
+    const o = obj as Record<string, unknown>;
+    if (o.datePublished || o.dateModified || o.dateCreated) return true;
+    for (const v of Object.values(o)) {
+      if (Array.isArray(v)) {
+        if (v.some((item) => hasDateFields(item))) return true;
+      } else if (typeof v === "object" && v !== null && hasDateFields(v)) return true;
+    }
+    return false;
+  }
+  function flattenLdItems(data: unknown): unknown[] {
+    const items = Array.isArray(data) ? data : [data];
+    const out: unknown[] = [];
+    for (const item of items) {
+      if (!item || typeof item !== "object") continue;
+      const o = item as Record<string, unknown>;
+      if (Array.isArray(o["@graph"])) {
+        for (const g of o["@graph"]) {
+          if (g && typeof g === "object") out.push(g);
+        }
+      } else {
+        out.push(item);
+      }
+    }
+    return out;
+  }
+  let found = false;
+  $('script[type="application/ld+json"]').each((_, el) => {
+    if (found) return;
+    const raw = $(el).html()?.trim();
+    if (!raw) return;
+    try {
+      let data: unknown = JSON.parse(raw);
+      if (typeof data === "string") {
+        try {
+          data = JSON.parse(data);
+        } catch {
+          return;
+        }
+      }
+      for (const item of flattenLdItems(data)) {
+        if (hasDateFields(item)) {
+          found = true;
+          return;
+        }
+      }
+    } catch {
+      // ignore invalid JSON-LD
+    }
+  });
+  return found;
+}
+
+/** True if the page has a date we can use for recency: visible in text or in JSON-LD (datePublished/dateModified). */
+function pageHasDate(html: string): boolean {
+  return pageHasVisibleDateInText(html) || pageHasSchemaDates(html);
 }
 
 const DATE_REGEX = /\b(20\d{2})[-/](0?[1-9]|1[0-2])[-/](0?[1-9]|[12]\d|3[01])\b|\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+20\d{2}\b/gi;
@@ -135,29 +198,26 @@ export function analyzeFreshness(pages: CrawlPage[]): { score: number; findings:
   }
   score += earningsScore * 0.35;
 
-  // 2) Earnings hub has visible date (25%) — so AI can cite "as of" and prefer current content.
+  // 2) Earnings hub has date (25%) — visible or in JSON-LD so AI can cite "as of" and prefer current content.
   let earningsHubHasDate = false;
   if (earningsPages.length >= 1) {
-    earningsHubHasDate = pageHasVisibleDate(earningsPages[0].html);
+    earningsHubHasDate = pageHasDate(earningsPages[0].html);
     findings.push({
       category: "Freshness",
       subcategory: "Earnings hub",
-      signal: earningsHubHasDate ? "Earnings hub page has visible date" : "Earnings hub page has no visible date",
+      signal: earningsHubHasDate ? "Earnings hub page has date (visible or in schema)" : "Earnings hub page has no visible or schema date",
       score: earningsHubHasDate ? 100 : 0,
-      evidence: earningsHubHasDate ? { url: earningsPages[0].url, method: "html_parse" } : { url: earningsPages[0].url, method: "html_parse" },
+      evidence: { url: earningsPages[0].url, method: earningsHubHasDate ? "html_parse" : "html_parse" },
       passed: earningsHubHasDate,
     });
   }
   score += (earningsHubHasDate ? 100 : 0) * 0.25;
 
-  // 3) Other pages with dates (25%) — proportion of crawled pages that show dates (citation/recency).
+  // 3) Other pages with dates (25%) — proportion of crawled pages that show dates (visible or in JSON-LD).
   let pagesWithDates = 0;
   let archiveFound = false;
   for (const page of sortedPages) {
-    const $ = cheerio.load(page.html);
-    const text = $("body").text() || "";
-    DATE_REGEX.lastIndex = 0;
-    if (DATE_REGEX.test(text)) pagesWithDates++;
+    if (pageHasDate(page.html)) pagesWithDates++;
     const path = new URL(page.url).pathname.toLowerCase();
     if (path.includes("archive") || path.includes("releases") || path.includes("events"))
       archiveFound = true;
@@ -167,7 +227,7 @@ export function analyzeFreshness(pages: CrawlPage[]): { score: number; findings:
   findings.push({
     category: "Freshness",
     subcategory: "Dates",
-    signal: `Pages with dates (press/events): ${pagesWithDates}/${sortedPages.length}`,
+    signal: `Pages with dates (visible or in schema): ${pagesWithDates}/${sortedPages.length}`,
     score: dateScore,
     evidence: { method: "html_parse" },
     passed: pagesWithDates >= 1,

@@ -90,6 +90,19 @@ function extractEPSSnippet(text: string): string | undefined {
   return hasContext ? snip : undefined;
 }
 
+/** Extract EPS snippet without requiring earnings context on same page (for multi-page combination). */
+function extractEPSSnippetAnyPage(text: string): string | undefined {
+  const match = text.match(EPS_PATTERN);
+  if (!match) return undefined;
+  const first = match[0];
+  const idx = text.indexOf(first);
+  const start = Math.max(0, idx - 20);
+  const end = Math.min(text.length, idx + first.length + 50);
+  let snip = text.slice(start, end).trim().replace(/\s+/g, " ");
+  if (snip.length > 120) snip = snip.slice(0, 117) + "…";
+  return snip;
+}
+
 function findSnippet(text: string, pattern: RegExp, maxLen = 120): string | undefined {
   const m = text.match(pattern);
   if (!m) return undefined;
@@ -126,6 +139,56 @@ const LEADERSHIP = /board\s+of\s+directors|leadership|management\s+team|executiv
 const IR_CONTACT = /investor\s+relations?|ir@|contact\s+investor|investors?@[\w.-]+\.(?:com|org)/i;
 const PRESS_RELEASE = /press\s+release|earnings\s+release|news\s+release|announcement/i;
 
+/** Combine evidence from multiple pages for revenue: snippet on one page + quarter label on another → answerable. */
+function tryRevenueCombined(sorted: CrawlPage[]): InvestorQuestionResult | null {
+  let revenuePage: CrawlPage | null = null;
+  let revenueSnippet: string | undefined;
+  let quarterPage: CrawlPage | null = null;
+  for (const p of sorted) {
+    const { text: t } = getPageContent(p.html);
+    const snip = extractRevenueSnippet(t);
+    if (snip && !revenuePage) {
+      revenuePage = p;
+      revenueSnippet = snip;
+    }
+    if (QUARTER_LABEL.test(t) && !quarterPage) quarterPage = p;
+  }
+  if (!revenuePage || !revenueSnippet) return null;
+  const hasQuarterOnRevenuePage = QUARTER_LABEL.test(getPageContent(revenuePage.html).text);
+  if (!hasQuarterOnRevenuePage && !quarterPage) {
+    return { id: "revenue", question: INVESTOR_QUESTIONS.find((q) => q.id === "revenue")!.question, status: "answerable", explanation: "Revenue figure found.", sourceUrl: revenuePage.url, evidenceSnippet: revenueSnippet, pageType: getPageType(revenuePage.url) };
+  }
+  const explanation = quarterPage && quarterPage !== revenuePage
+    ? "Quarterly revenue found; quarter label from another page."
+    : "Quarterly revenue and quarter label found.";
+  return { id: "revenue", question: INVESTOR_QUESTIONS.find((q) => q.id === "revenue")!.question, status: "answerable", explanation, sourceUrl: revenuePage.url, evidenceSnippet: revenueSnippet, pageType: getPageType(revenuePage.url) };
+}
+
+/** Combine evidence from multiple pages for EPS: number on one page + earnings context on another → answerable. */
+function tryEPSCombined(sorted: CrawlPage[]): InvestorQuestionResult | null {
+  let epsPage: CrawlPage | null = null;
+  let epsSnippet: string | undefined;
+  let contextPage: CrawlPage | null = null;
+  for (const p of sorted) {
+    const { text: t } = getPageContent(p.html);
+    const snip = extractEPSSnippetAnyPage(t);
+    if (snip && !epsPage) {
+      epsPage = p;
+      epsSnippet = snip;
+    }
+    if (hasEarningsContext(t) && !contextPage) contextPage = p;
+  }
+  if (!epsPage || !epsSnippet) return null;
+  const hasContextOnEpsPage = hasEarningsContext(getPageContent(epsPage.html).text);
+  if (!hasContextOnEpsPage && !contextPage) {
+    return { id: "eps", question: INVESTOR_QUESTIONS.find((q) => q.id === "eps")!.question, status: "answerable", explanation: "EPS figure found.", sourceUrl: epsPage.url, evidenceSnippet: epsSnippet, pageType: getPageType(epsPage.url) };
+  }
+  const explanation = contextPage && contextPage !== epsPage
+    ? "EPS figure found; earnings context from another page."
+    : "EPS figure found.";
+  return { id: "eps", question: INVESTOR_QUESTIONS.find((q) => q.id === "eps")!.question, status: "answerable", explanation, sourceUrl: epsPage.url, evidenceSnippet: epsSnippet, pageType: getPageType(epsPage.url) };
+}
+
 function testQuestion(
   id: string,
   question: string,
@@ -140,6 +203,16 @@ function testQuestion(
     explanation: "No relevant page or evidence found within request limits.",
   };
 
+  // Multi-page combination: revenue and EPS can use evidence from 2–3 pages.
+  if (id === "revenue") {
+    const combined = tryRevenueCombined(sorted);
+    if (combined) return combined;
+  }
+  if (id === "eps") {
+    const combined = tryEPSCombined(sorted);
+    if (combined) return combined;
+  }
+
   for (const page of sorted) {
     const { text, links } = getPageContent(page.html);
     const combined = text + " " + links.map((l) => l.href + " " + l.text).join(" ");
@@ -147,25 +220,14 @@ function testQuestion(
 
     switch (id) {
       case "revenue": {
-        const snip = extractRevenueSnippet(text);
-        const hasQuarter = QUARTER_LABEL.test(text);
-        if (snip && hasQuarter) {
-          return { id, question, status: "answerable", explanation: "Quarterly revenue and quarter label found.", sourceUrl: page.url, evidenceSnippet: snip, pageType: pt };
-        }
-        if (snip) {
-          best = { id, question, status: "answerable", explanation: "Revenue figure found.", sourceUrl: page.url, evidenceSnippet: snip, pageType: pt };
-          return best;
-        }
-        if (hasQuarter && /revenue|\$[\d,.]+\s*(?:million|billion|M|B)/i.test(text)) {
+        if (extractRevenueSnippet(text)) break;
+        if (QUARTER_LABEL.test(text) && /revenue|\$[\d,.]+\s*(?:million|billion|M|B)/i.test(text)) {
           best = { id, question, status: "partial", explanation: "Earnings context and quarter found but no clear revenue snippet.", sourceUrl: page.url, pageType: pt };
         }
         break;
       }
       case "eps": {
-        const snip = extractEPSSnippet(text);
-        if (snip) {
-          return { id, question, status: "answerable", explanation: "EPS figure found.", sourceUrl: page.url, evidenceSnippet: snip, pageType: pt };
-        }
+        if (extractEPSSnippet(text)) break;
         if (hasEarningsContext(text) && /EPS|earnings\s+per\s+share|[\d.]+(\s*\$?\s*per\s+share)/i.test(text)) {
           best = { id, question, status: "partial", explanation: "EPS context found but no clear number.", sourceUrl: page.url, pageType: pt };
         }
