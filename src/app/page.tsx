@@ -12,6 +12,7 @@ import type {
 } from "@/lib/types";
 import { AEO_INTRO, CATEGORY_CONTEXT, getFindingWhyItMatters, getCategoryFindingsForDomain } from "@/lib/aeo-context";
 import { messageForCode, isScanErrorCode } from "@/lib/scan-errors";
+import { downloadResultsPdf } from "@/lib/download-report-pdf";
 
 type ScanProgressEvent = { phase: string; message: string; progress: number };
 
@@ -22,14 +23,17 @@ async function runScan(
 ): Promise<{
   runId: string;
   resultA: DomainResult;
-  resultB: DomainResult;
+  resultB: DomainResult | null;
   cached?: boolean;
   cachedAt?: string;
 }> {
   const res = await fetch("/api/scan", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ domainA: domainA.trim(), domainB: domainB.trim() }),
+    body: JSON.stringify({
+      domainA: domainA.trim(),
+      ...(domainB.trim() ? { domainB: domainB.trim() } : {}),
+    }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -49,7 +53,7 @@ async function runScan(
     let donePayload: {
       runId: string;
       resultA: DomainResult;
-      resultB: DomainResult;
+      resultB: DomainResult | null;
       cached?: boolean;
       cachedAt?: string;
     } | null = null;
@@ -69,7 +73,7 @@ async function runScan(
             donePayload = {
               runId: String(data.runId ?? ""),
               resultA: data.resultA as DomainResult,
-              resultB: data.resultB as DomainResult,
+              resultB: data.resultB != null ? (data.resultB as DomainResult) : null,
               cached: data.cached === true,
               cachedAt: typeof data.cachedAt === "string" ? data.cachedAt : undefined,
             };
@@ -126,9 +130,10 @@ function CategoryRows({
   scoreColorClass,
 }: {
   resultA: DomainResult;
-  resultB: DomainResult;
+  resultB: DomainResult | null;
   scoreColorClass: (n: number) => string;
 }) {
+  const singleDomain = resultB == null;
   const [openImprovements, setOpenImprovements] = useState<Set<string>>(new Set());
   const toggle = (key: string) => {
     setOpenImprovements((prev) => {
@@ -143,17 +148,16 @@ function CategoryRows({
       {CATEGORY_ITEMS.map(({ key, label }) => {
         const ctx = CATEGORY_CONTEXT[key];
         if (!ctx) return null;
-        // Use category score for all rows so the 5 numbers match what feeds into Overall readiness
         const scoreA = resultA.categoryScores[key] ?? 0;
-        const scoreB = resultB.categoryScores[key] ?? 0;
+        const scoreB = resultB?.categoryScores[key] ?? 0;
         const criteriaA = getCategoryFindingsForDomain(key, resultA.findings ?? []);
-        const criteriaB = getCategoryFindingsForDomain(key, resultB.findings ?? []);
+        const criteriaB = resultB ? getCategoryFindingsForDomain(key, resultB.findings ?? []) : [];
         const hasCriteria = criteriaA.length > 0 || criteriaB.length > 0;
         const isOpen = openImprovements.has(key);
         return (
           <div
             key={key}
-            className="grid grid-cols-[3rem_1fr_3rem] gap-3 md:gap-4 px-4 py-3 md:py-2.5 items-start"
+            className={`grid gap-3 md:gap-4 px-4 py-3 md:py-2.5 items-start ${singleDomain ? "grid-cols-[3rem_1fr]" : "grid-cols-[3rem_1fr_3rem]"}`}
           >
             <span className={`text-2xl font-bold tabular-nums text-right shrink-0 pt-0.5 ${scoreColorClass(scoreA)}`}>
               {scoreA}
@@ -168,7 +172,10 @@ function CategoryRows({
               </p>
               {key === "structuredData" && (
                 <p className="text-xs text-zinc-500 mt-0.5">
-                  <span className="font-medium text-zinc-500">This row:</span> Category score (includes feeds). JSON-LD only: {resultA.structuredDataBreakdown?.structuredDataScore ?? "—"} / {resultB.structuredDataBreakdown?.structuredDataScore ?? "—"}
+                  <span className="font-medium text-zinc-500">This row:</span> Category score (includes feeds).
+                  {singleDomain
+                    ? ` JSON-LD only: ${resultA.structuredDataBreakdown?.structuredDataScore ?? "—"}`
+                    : ` JSON-LD only: ${resultA.structuredDataBreakdown?.structuredDataScore ?? "—"} / ${resultB!.structuredDataBreakdown?.structuredDataScore ?? "—"}`}
                 </p>
               )}
               {hasCriteria && (
@@ -180,14 +187,14 @@ function CategoryRows({
                     aria-expanded={isOpen}
                   >
                     <span className="text-zinc-500" aria-hidden>{isOpen ? "▼" : "▶"}</span>
-                    Criteria (pass / fail by domain)
+                    {singleDomain ? "Criteria (pass / fail)" : "Criteria (pass / fail by domain)"}
                   </button>
                   {isOpen && (
-                    <div className="mt-1 grid grid-cols-2 gap-4">
+                    <div className={singleDomain ? "mt-1" : "mt-1 grid grid-cols-2 gap-4"}>
                       <div>
-                        <p className="text-xs font-medium text-zinc-500 mb-0.5">Domain A</p>
+                        {!singleDomain && <p className="text-xs font-medium text-zinc-500 mb-0.5">Domain A</p>}
                         <ul className="text-xs text-zinc-400 space-y-1 list-none">
-                          {criteriaA.map(({ label, passed, improvement }, i) => (
+                          {criteriaA.map(({ label: l, passed, improvement }, i) => (
                             <li key={i} className="flex gap-1.5 items-start">
                               <span className="shrink-0 mt-0.5" aria-hidden>
                                 {passed ? (
@@ -197,7 +204,7 @@ function CategoryRows({
                                 )}
                               </span>
                               <span className="min-w-0">
-                                <span className={passed ? undefined : "text-zinc-300"}>{label}</span>
+                                <span className={passed ? undefined : "text-zinc-300"}>{l}</span>
                                 {!passed && improvement && (
                                   <span className="block text-zinc-500 mt-0.5 italic">How to improve: {improvement}</span>
                                 )}
@@ -206,36 +213,40 @@ function CategoryRows({
                           ))}
                         </ul>
                       </div>
-                      <div>
-                        <p className="text-xs font-medium text-zinc-500 mb-0.5">Domain B</p>
-                        <ul className="text-xs text-zinc-400 space-y-1 list-none">
-                          {criteriaB.map(({ label, passed, improvement }, i) => (
-                            <li key={i} className="flex gap-1.5 items-start">
-                              <span className="shrink-0 mt-0.5" aria-hidden>
-                                {passed ? (
-                                  <span className="text-emerald-400" title="Passed">✓</span>
-                                ) : (
-                                  <span className="text-red-400" title="Failed">✗</span>
-                                )}
-                              </span>
-                              <span className="min-w-0">
-                                <span className={passed ? undefined : "text-zinc-300"}>{label}</span>
-                                {!passed && improvement && (
-                                  <span className="block text-zinc-500 mt-0.5 italic">How to improve: {improvement}</span>
-                                )}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
+                      {!singleDomain && (
+                        <div>
+                          <p className="text-xs font-medium text-zinc-500 mb-0.5">Domain B</p>
+                          <ul className="text-xs text-zinc-400 space-y-1 list-none">
+                            {criteriaB.map(({ label: l, passed, improvement }, i) => (
+                              <li key={i} className="flex gap-1.5 items-start">
+                                <span className="shrink-0 mt-0.5" aria-hidden>
+                                  {passed ? (
+                                    <span className="text-emerald-400" title="Passed">✓</span>
+                                  ) : (
+                                    <span className="text-red-400" title="Failed">✗</span>
+                                  )}
+                                </span>
+                                <span className="min-w-0">
+                                  <span className={passed ? undefined : "text-zinc-300"}>{l}</span>
+                                  {!passed && improvement && (
+                                    <span className="block text-zinc-500 mt-0.5 italic">How to improve: {improvement}</span>
+                                  )}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               )}
             </div>
-            <span className={`text-2xl font-bold tabular-nums text-left shrink-0 pt-0.5 ${scoreColorClass(scoreB)}`}>
-              {scoreB}
-            </span>
+            {!singleDomain && (
+              <span className={`text-2xl font-bold tabular-nums text-left shrink-0 pt-0.5 ${scoreColorClass(scoreB)}`}>
+                {scoreB}
+              </span>
+            )}
           </div>
         );
       })}
@@ -248,12 +259,13 @@ function ResultsByCategory({
   resultB,
 }: {
   resultA: DomainResult;
-  resultB: DomainResult;
+  resultB: DomainResult | null;
 }) {
+  const singleDomain = resultB == null;
   return (
     <section className="rounded-xl border border-zinc-700/60 bg-zinc-900/40 overflow-hidden">
-      {/* Overall strip: stacked on small screens, 3-col on md+ */}
-      <div className="grid grid-cols-2 md:grid-cols-[1fr_auto_1fr] gap-3 md:gap-4 p-4 border-b border-zinc-700/60 bg-zinc-800/30 items-center">
+      {/* Overall strip: single-domain or compare */}
+      <div className={`grid gap-3 md:gap-4 p-4 border-b border-zinc-700/60 bg-zinc-800/30 items-center ${singleDomain ? "grid-cols-1" : "grid-cols-2 md:grid-cols-[1fr_auto_1fr]"}`}>
         <div className="flex items-center gap-2 min-w-0 order-2 md:order-1">
           {resultA.faviconUrl && (
             <img
@@ -274,7 +286,7 @@ function ResultsByCategory({
             </span>
           </div>
         </div>
-        <div className="col-span-2 md:col-span-1 flex flex-col items-center gap-1 min-w-0 md:min-w-[7rem] order-1 md:order-2">
+        <div className={`flex flex-col items-center gap-1 min-w-0 ${singleDomain ? "" : "col-span-2 md:col-span-1"} md:min-w-[7rem] order-1 md:order-2`}>
           <span className="text-xs text-zinc-500 font-medium flex items-center gap-1.5 flex-wrap justify-center">
             Overall readiness
             <Link
@@ -285,39 +297,47 @@ function ResultsByCategory({
             </Link>
           </span>
           <div className="flex items-center gap-4 md:gap-6">
-            <span className={`text-4xl md:text-5xl font-bold tabular-nums text-right ${scoreColorClass(resultA.overallScore)}`}>
+            <span className={`text-4xl md:text-5xl font-bold tabular-nums ${singleDomain ? "" : "text-right"} ${scoreColorClass(resultA.overallScore)}`}>
               {resultA.overallScore}
             </span>
-            <span className="text-zinc-500 text-sm font-medium shrink-0">vs</span>
-            <span className={`text-4xl md:text-5xl font-bold tabular-nums text-left ${scoreColorClass(resultB.overallScore)}`}>
-              {resultB.overallScore}
-            </span>
+            {!singleDomain && (
+              <>
+                <span className="text-zinc-500 text-sm font-medium shrink-0">vs</span>
+                <span className={`text-4xl md:text-5xl font-bold tabular-nums text-left ${scoreColorClass(resultB!.overallScore)}`}>
+                  {resultB!.overallScore}
+                </span>
+              </>
+            )}
           </div>
-          <span className="text-[10px] text-zinc-500">AI Citation: {resultA.aiCitationReadiness ?? "—"} vs {resultB.aiCitationReadiness ?? "—"}</span>
+          <span className="text-[10px] text-zinc-500">
+            AI Citation: {resultA.aiCitationReadiness ?? "—"}
+            {!singleDomain && ` vs ${resultB!.aiCitationReadiness ?? "—"}`}
+          </span>
         </div>
-        <div className="flex items-center gap-2 min-w-0 justify-end order-3 md:order-3">
-          {resultB.faviconUrl && (
-            <img
-              src={resultB.faviconUrl}
-              alt=""
-              className="h-7 w-7 shrink-0 rounded object-contain bg-white/10"
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-              }}
-            />
-          )}
-          <div className="min-w-0 text-right">
-            <span className="text-sm font-medium text-white truncate block" title={resultB.domain}>
-              {resultB.domain}
-            </span>
-            <span className="text-xs text-zinc-500">
-              overall · {resultB.crawledPageCount} pages
-            </span>
+        {!singleDomain && (
+          <div className="flex items-center gap-2 min-w-0 justify-end order-3 md:order-3">
+            {resultB!.faviconUrl && (
+              <img
+                src={resultB!.faviconUrl}
+                alt=""
+                className="h-7 w-7 shrink-0 rounded object-contain bg-white/10"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
+            )}
+            <div className="min-w-0 text-right">
+              <span className="text-sm font-medium text-white truncate block" title={resultB!.domain}>
+                {resultB!.domain}
+              </span>
+              <span className="text-xs text-zinc-500">
+                overall · {resultB!.crawledPageCount} pages
+              </span>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Category rows: Score A | Description | Score B - scores aligned in fixed columns */}
       <CategoryRows
         resultA={resultA}
         resultB={resultB}
@@ -397,12 +417,13 @@ function InvestorQuestionTable({
   domainLabelB,
 }: {
   resultsA: InvestorQuestionResult[];
-  resultsB: InvestorQuestionResult[];
+  resultsB: InvestorQuestionResult[] | null;
   domainLabelA: string;
-  domainLabelB: string;
+  domainLabelB: string | null;
 }) {
-  const rows = resultsA.length >= resultsB.length ? resultsA : resultsB;
-  const getB = (id: string) => resultsB.find((r) => r.id === id);
+  const singleDomain = resultsB == null;
+  const rows = singleDomain ? resultsA : (resultsA.length >= resultsB!.length ? resultsA : resultsB!);
+  const getB = (id: string) => (singleDomain ? null : resultsB!.find((r) => r.id === id));
   return (
     <div className="rounded-xl border border-zinc-700/60 bg-zinc-900/40 overflow-hidden">
       <div className="px-4 py-3 border-b border-zinc-700/60 bg-zinc-800/30">
@@ -412,59 +433,93 @@ function InvestorQuestionTable({
         </p>
       </div>
       <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
-        <table className="w-full text-sm min-w-[640px]">
+        <table className={`w-full text-sm ${singleDomain ? "min-w-0" : "min-w-[640px]"}`} aria-label="Investor question coverage: status and evidence per question">
+          <caption className="sr-only">
+            Investor question coverage (AI answerability): pass/fail per question with evidence and source URL
+          </caption>
           <thead className="sticky top-0 bg-zinc-800/95 text-zinc-400 text-left z-10">
-            <tr>
-              <th className="sticky left-0 z-20 w-8 bg-zinc-800/95 px-4 py-2" rowSpan={2}>#</th>
-              <th className="sticky left-[4rem] z-20 min-w-[180px] bg-zinc-800/95 px-4 py-2 shadow-[2px_0_4px_rgba(0,0,0,0.15)]" rowSpan={2}>Question</th>
-              <th colSpan={2} className="px-4 py-2 text-center font-semibold text-white bg-emerald-900/30 border-l border-zinc-600/60">
-                {domainLabelA}
-              </th>
-              <th colSpan={2} className="px-4 py-2 text-center font-semibold text-white bg-amber-900/20 border-l-2 border-zinc-600">
-                {domainLabelB}
-              </th>
-            </tr>
-            <tr>
-              <th className="px-4 py-1.5 w-28 border-l border-zinc-600/60 bg-emerald-900/20">Status</th>
-              <th className="px-4 py-1.5 min-w-[140px] bg-emerald-900/20">Evidence / URL</th>
-              <th className="px-4 py-1.5 w-28 border-l-2 border-zinc-600 bg-amber-900/15">Status</th>
-              <th className="px-4 py-1.5 min-w-[140px] bg-amber-900/15">Evidence / URL</th>
-            </tr>
+            {singleDomain ? (
+              <tr>
+                <th scope="col" className="w-8 bg-zinc-800/95 px-4 py-2">#</th>
+                <th scope="col" className="min-w-[180px] bg-zinc-800/95 px-4 py-2">Question</th>
+                <th scope="col" className="px-4 py-2 font-semibold text-white bg-emerald-900/30 border-l border-zinc-600/60 w-28">Status</th>
+                <th scope="col" className="px-4 py-2 font-semibold text-white bg-emerald-900/30 min-w-[140px]">Evidence / URL</th>
+              </tr>
+            ) : (
+              <>
+                <tr>
+                  <th scope="col" className="sticky left-0 z-20 w-8 bg-zinc-800/95 px-4 py-2" rowSpan={2}>#</th>
+                  <th scope="col" className="sticky left-[4rem] z-20 min-w-[180px] bg-zinc-800/95 px-4 py-2 shadow-[2px_0_4px_rgba(0,0,0,0.15)]" rowSpan={2}>Question</th>
+                  <th scope="col" colSpan={2} className="px-4 py-2 text-center font-semibold text-white bg-emerald-900/30 border-l border-zinc-600/60">
+                    {domainLabelA}
+                  </th>
+                  <th scope="col" colSpan={2} className="px-4 py-2 text-center font-semibold text-white bg-amber-900/20 border-l-2 border-zinc-600">
+                    {domainLabelB!}
+                  </th>
+                </tr>
+                <tr>
+                  <th scope="col" className="px-4 py-1.5 w-28 border-l border-zinc-600/60 bg-emerald-900/20">Status</th>
+                  <th scope="col" className="px-4 py-1.5 min-w-[140px] bg-emerald-900/20">Evidence / URL</th>
+                  <th scope="col" className="px-4 py-1.5 w-28 border-l-2 border-zinc-600 bg-amber-900/15">Status</th>
+                  <th scope="col" className="px-4 py-1.5 min-w-[140px] bg-amber-900/15">Evidence / URL</th>
+                </tr>
+              </>
+            )}
           </thead>
           <tbody>
-            {rows.map((ra, i) => {
-              const rb = getB(ra.id);
-              return (
-                <tr key={ra.id} className="group border-t border-zinc-700/40 hover:bg-zinc-800/40">
-                  <td className="sticky left-0 z-10 w-8 bg-zinc-900/40 group-hover:bg-zinc-800/40 px-4 py-2 text-zinc-500 tabular-nums">{i + 1}</td>
-                  <td className="sticky left-[4rem] z-10 min-w-[180px] bg-zinc-900/40 group-hover:bg-zinc-800/40 px-4 py-2 text-zinc-300 shadow-[2px_0_4px_rgba(0,0,0,0.15)]">{ra.question}</td>
-                  <td className={`px-4 py-2 font-medium border-l border-zinc-700/60 bg-emerald-950/20 ${statusColorClass(ra.status)}`}>{statusLabel(ra.status)}</td>
-                  <td className="px-4 py-2 text-zinc-400 text-xs bg-emerald-950/20">
-                    {ra.pageType && <span className="block text-[10px] text-zinc-500 uppercase tracking-wide mb-0.5">{ra.pageType}</span>}
-                    {ra.evidenceSnippet && <span className="block truncate max-w-[200px]" title={ra.evidenceSnippet}>{ra.evidenceSnippet}</span>}
-                    {ra.sourceUrl && (
-                      <a href={ra.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-400/80 hover:underline truncate block max-w-[200px]">
-                        {ra.sourceUrl}
-                      </a>
-                    )}
-                    {!ra.evidenceSnippet && !ra.sourceUrl && ra.explanation && <span className="text-zinc-500">{ra.explanation}</span>}
-                  </td>
-                  <td className={`px-4 py-2 font-medium border-l-2 border-zinc-600 bg-amber-950/10 ${rb ? statusColorClass(rb.status) : "text-zinc-500"}`}>
-                    {rb ? statusLabel(rb.status) : "—"}
-                  </td>
-                  <td className="px-4 py-2 text-zinc-400 text-xs bg-amber-950/10">
-                    {rb?.pageType && <span className="block text-[10px] text-zinc-500 uppercase tracking-wide mb-0.5">{rb.pageType}</span>}
-                    {rb?.evidenceSnippet && <span className="block truncate max-w-[200px]" title={rb.evidenceSnippet}>{rb.evidenceSnippet}</span>}
-                    {rb?.sourceUrl && (
-                      <a href={rb.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-400/80 hover:underline truncate block max-w-[200px]">
-                        {rb.sourceUrl}
-                      </a>
-                    )}
-                    {rb && !rb.evidenceSnippet && !rb.sourceUrl && rb.explanation && <span className="text-zinc-500">{rb.explanation}</span>}
-                  </td>
-                </tr>
-              );
-            })}
+            {singleDomain ? (
+              rows.map((ra, i) => (
+                  <tr key={ra.id} className="group border-t border-zinc-700/40 hover:bg-zinc-800/40">
+                    <td className="w-8 px-4 py-2 text-zinc-500 tabular-nums">{i + 1}</td>
+                    <td className="min-w-[180px] px-4 py-2 text-zinc-300">{ra.question}</td>
+                    <td className={`px-4 py-2 font-medium border-l border-zinc-700/60 bg-emerald-950/20 ${statusColorClass(ra.status)}`}>{statusLabel(ra.status)}</td>
+                    <td className="px-4 py-2 text-zinc-400 text-xs bg-emerald-950/20">
+                      {ra.pageType && <span className="block text-[10px] text-zinc-500 uppercase tracking-wide mb-0.5">{ra.pageType}</span>}
+                      {ra.evidenceSnippet && <span className="block truncate max-w-[200px]" title={ra.evidenceSnippet}>{ra.evidenceSnippet}</span>}
+                      {ra.sourceUrl && (
+                        <a href={ra.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-400/80 hover:underline truncate block max-w-[200px]">
+                          {ra.sourceUrl}
+                        </a>
+                      )}
+                      {!ra.evidenceSnippet && !ra.sourceUrl && ra.explanation && <span className="text-zinc-500">{ra.explanation}</span>}
+                    </td>
+                  </tr>
+                ))
+            ) : (
+              rows.map((ra, i) => {
+                const rb = getB(ra.id);
+                return (
+                  <tr key={ra.id} className="group border-t border-zinc-700/40 hover:bg-zinc-800/40">
+                    <td className="sticky left-0 z-10 w-8 bg-zinc-900/40 group-hover:bg-zinc-800/40 px-4 py-2 text-zinc-500 tabular-nums">{i + 1}</td>
+                    <td className="sticky left-[4rem] z-10 min-w-[180px] bg-zinc-900/40 group-hover:bg-zinc-800/40 px-4 py-2 text-zinc-300 shadow-[2px_0_4px_rgba(0,0,0,0.15)]">{ra.question}</td>
+                    <td className={`px-4 py-2 font-medium border-l border-zinc-700/60 bg-emerald-950/20 ${statusColorClass(ra.status)}`}>{statusLabel(ra.status)}</td>
+                    <td className="px-4 py-2 text-zinc-400 text-xs bg-emerald-950/20">
+                      {ra.pageType && <span className="block text-[10px] text-zinc-500 uppercase tracking-wide mb-0.5">{ra.pageType}</span>}
+                      {ra.evidenceSnippet && <span className="block truncate max-w-[200px]" title={ra.evidenceSnippet}>{ra.evidenceSnippet}</span>}
+                      {ra.sourceUrl && (
+                        <a href={ra.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-400/80 hover:underline truncate block max-w-[200px]">
+                          {ra.sourceUrl}
+                        </a>
+                      )}
+                      {!ra.evidenceSnippet && !ra.sourceUrl && ra.explanation && <span className="text-zinc-500">{ra.explanation}</span>}
+                    </td>
+                    <td className={`px-4 py-2 font-medium border-l-2 border-zinc-600 bg-amber-950/10 ${rb ? statusColorClass(rb.status) : "text-zinc-500"}`}>
+                      {rb ? statusLabel(rb.status) : "—"}
+                    </td>
+                    <td className="px-4 py-2 text-zinc-400 text-xs bg-amber-950/10">
+                      {rb?.pageType && <span className="block text-[10px] text-zinc-500 uppercase tracking-wide mb-0.5">{rb.pageType}</span>}
+                      {rb?.evidenceSnippet && <span className="block truncate max-w-[200px]" title={rb.evidenceSnippet}>{rb.evidenceSnippet}</span>}
+                      {rb?.sourceUrl && (
+                        <a href={rb.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-400/80 hover:underline truncate block max-w-[200px]">
+                          {rb.sourceUrl}
+                        </a>
+                      )}
+                      {rb && !rb.evidenceSnippet && !rb.sourceUrl && rb.explanation && <span className="text-zinc-500">{rb.explanation}</span>}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
@@ -482,15 +537,16 @@ function FindingsTable({ findings, domainLabel }: { findings: Finding[]; domainL
         Findings — {domainLabel}
       </div>
       <div className="max-h-[320px] overflow-y-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm" aria-label={`Findings for ${domainLabel}`}>
+          <caption className="sr-only">Findings: category, signal, score, evidence, and why it matters for AEO</caption>
           <thead className="sticky top-0 bg-zinc-800/95 text-zinc-400 text-left">
             <tr>
-              <th className="px-4 py-2 w-8">✓</th>
-              <th className="px-4 py-2">Category</th>
-              <th className="px-4 py-2">Signal</th>
-              <th className="px-4 py-2 w-14">Score</th>
-              <th className="px-4 py-2">Evidence</th>
-              <th className="px-4 py-2 w-16">Why it matters</th>
+              <th scope="col" className="px-4 py-2 w-8">✓</th>
+              <th scope="col" className="px-4 py-2">Category</th>
+              <th scope="col" className="px-4 py-2">Signal</th>
+              <th scope="col" className="px-4 py-2 w-14">Score</th>
+              <th scope="col" className="px-4 py-2">Evidence</th>
+              <th scope="col" className="px-4 py-2 w-16">Why it matters</th>
             </tr>
           </thead>
           <tbody>
@@ -529,14 +585,16 @@ function FindingsTable({ findings, domainLabel }: { findings: Finding[]; domainL
                     <button
                       type="button"
                       onClick={() => setOpenWhyRow(openWhyRow === i ? null : i)}
-                      className="text-xs text-emerald-400/90 hover:text-emerald-300 underline focus:outline-none focus:ring-0"
+                      className="text-xs text-emerald-400/90 hover:text-emerald-300 underline focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2 focus:ring-offset-zinc-900 rounded"
+                      aria-expanded={openWhyRow === i}
+                      aria-controls={openWhyRow === i ? `finding-why-${i}` : undefined}
                     >
                       {openWhyRow === i ? "Hide" : "Why?"}
                     </button>
                   </td>
                 </tr>
                 {openWhyRow === i && (
-                  <tr className="border-t border-zinc-700/30 bg-zinc-800/50">
+                  <tr id={`finding-why-${i}`} className="border-t border-zinc-700/30 bg-zinc-800/50" role="region" aria-label="Why it matters for AEO">
                     <td colSpan={6} className="px-4 py-3 text-zinc-400 text-xs leading-relaxed">
                       <span className="text-zinc-500 font-medium">Why it matters for AEO: </span>
                       {getFindingWhyItMatters(f.category, f.subcategory)}
@@ -564,37 +622,18 @@ function FindingsTable({ findings, domainLabel }: { findings: Finding[]; domainL
 function HomeContent() {
   const searchParams = useSearchParams();
   const [domainA, setDomainA] = useState("");
-  const [domainB, setDomainB] = useState("https://investor.workday.com");
+  const [domainB, setDomainB] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{
     resultA: DomainResult;
-    resultB: DomainResult;
+    resultB: DomainResult | null;
     cached?: boolean;
     cachedAt?: string;
   } | null>(null);
 
   const [scanProgress, setScanProgress] = useState(0);
   const [scanStatusMessage, setScanStatusMessage] = useState("");
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
-
-  useEffect(() => {
-    const t = typeof localStorage !== "undefined" ? localStorage.getItem("ir-theme") : null;
-    if (t === "light") {
-      setTheme("light");
-      document.documentElement.dataset.theme = "light";
-    } else {
-      setTheme("dark");
-      document.documentElement.dataset.theme = "dark";
-    }
-  }, []);
-
-  const toggleTheme = () => {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    localStorage.setItem("ir-theme", next);
-    document.documentElement.dataset.theme = next;
-  };
 
   // Auto-fill from URL: ?domainA=... and ?domainB=...
   useEffect(() => {
@@ -610,7 +649,7 @@ function HomeContent() {
     setScanProgress(0);
     setScanStatusMessage("Starting scan…");
     try {
-      const data = await runScan(domainA, domainB, (event) => {
+      const data = await runScan(domainA, domainB || "", (event) => {
         setScanStatusMessage(event.message);
         setScanProgress(event.progress);
       });
@@ -634,8 +673,8 @@ function HomeContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!domainA.trim() || !domainB.trim()) {
-      setError("Enter both Domain A and Domain B.");
+    if (!domainA.trim()) {
+      setError("Enter at least Domain A.");
       return;
     }
     setResult(null);
@@ -646,41 +685,38 @@ function HomeContent() {
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
       <header className="border-b border-[var(--card-border)] py-6">
         <div className="max-w-7xl mx-auto px-4">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-[var(--foreground)]">IR AI Readiness Scanner</h1>
-              <p className="text-[var(--muted)] text-sm mt-1">
-                Compare two domains for investor relations AI/agent retrieval signals
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="px-3 py-1.5 rounded-lg text-sm font-medium bg-[var(--card)] border border-[var(--card-border)] text-[var(--foreground)] hover:opacity-90 transition-opacity"
-              aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
-            >
-              {theme === "dark" ? "Light" : "Dark"}
-            </button>
+          <div>
+            <h1 className="text-2xl font-bold text-[var(--foreground)]">IR AI Readiness Scanner</h1>
+            <p className="text-[var(--muted)] text-sm mt-1">
+              Compare two domains for investor relations AI/agent retrieval signals
+            </p>
           </div>
           <div className="mt-4 p-4 rounded-lg bg-[var(--card)]/50 border border-[var(--card-border)] text-sm">
             <h2 className="font-semibold text-[var(--foreground)] mb-1">{AEO_INTRO.title}</h2>
             <p className="text-[var(--muted)] mb-2">{AEO_INTRO.body}</p>
             <p className="text-[var(--muted)] text-xs opacity-90">{AEO_INTRO.scoreMeaning}</p>
+            <p className="text-[var(--muted)] text-xs mt-2">
+              <Link href="/methodology" className="text-emerald-400 hover:text-emerald-300 underline">
+                How we score →
+              </Link>
+            </p>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main id="main-content" className="max-w-7xl mx-auto px-4 py-8" tabIndex={-1}>
         <form onSubmit={handleSubmit} className="flex flex-col md:flex-row md:flex-wrap gap-4 md:items-end mb-8">
           <div className="w-full md:flex-1 md:min-w-[200px] min-w-0">
-            <label className="block text-sm text-zinc-400 mb-1">Domain A</label>
+            <label htmlFor="domain-a" className="block text-sm text-zinc-400 mb-1">Domain A</label>
             <input
+              id="domain-a"
               type="text"
               placeholder="example.com or https://example.com"
               value={domainA}
               onChange={(e) => setDomainA(e.target.value)}
               className="w-full px-4 py-2.5 rounded-lg bg-zinc-800 border border-zinc-600 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500"
               disabled={loading}
+              autoComplete="url"
             />
             <div className="flex flex-wrap gap-1.5 mt-2 min-w-0">
               {PRESET_IR_SITES.slice(0, 6).map(({ name, url }) => (
@@ -689,7 +725,8 @@ function HomeContent() {
                   type="button"
                   onClick={() => setDomainA(url)}
                   disabled={loading}
-                  className="px-2.5 py-1 rounded text-xs font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-200 disabled:opacity-50 transition-colors shrink-0"
+                  className="px-2.5 py-1 rounded text-xs font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-200 disabled:opacity-50 transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2 focus:ring-offset-[var(--background)]"
+                  aria-label={`Use ${name} as Domain A`}
                 >
                   {name}
                 </button>
@@ -699,19 +736,21 @@ function HomeContent() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full md:w-auto px-6 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0 md:self-center"
+            className="w-full md:w-auto px-6 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0 md:self-center focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-[var(--background)]"
           >
-            {loading ? "Scanning…" : "Compare"}
+            {loading ? "Scanning…" : domainB.trim() ? "Compare" : "Scan"}
           </button>
           <div className="w-full md:flex-1 md:min-w-[200px] min-w-0">
-            <label className="block text-sm text-zinc-400 mb-1">Domain B</label>
+            <label htmlFor="domain-b" className="block text-sm text-zinc-400 mb-1">Domain B (optional)</label>
             <input
+              id="domain-b"
               type="text"
-              placeholder="example.com or https://example.com"
+              placeholder="Leave empty to scan one domain"
               value={domainB}
               onChange={(e) => setDomainB(e.target.value)}
               className="w-full px-4 py-2.5 rounded-lg bg-zinc-800 border border-zinc-600 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500"
               disabled={loading}
+              autoComplete="url"
             />
             <div className="flex flex-wrap gap-1.5 mt-2 min-w-0">
               {PRESET_IR_SITES.slice(6, 9).map(({ name, url }) => (
@@ -720,7 +759,8 @@ function HomeContent() {
                   type="button"
                   onClick={() => setDomainB(url)}
                   disabled={loading}
-                  className="px-2.5 py-1 rounded text-xs font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-200 disabled:opacity-50 transition-colors shrink-0"
+                  className="px-2.5 py-1 rounded text-xs font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-200 disabled:opacity-50 transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2 focus:ring-offset-[var(--background)]"
+                  aria-label={`Use ${name} as Domain B`}
                 >
                   {name}
                 </button>
@@ -751,14 +791,14 @@ function HomeContent() {
               <button
                 type="button"
                 onClick={() => setError(null)}
-                className="px-3 py-1.5 rounded text-sm font-medium bg-red-900/50 hover:bg-red-900/70 text-red-100 transition-colors"
+                className="px-3 py-1.5 rounded text-sm font-medium bg-red-900/50 hover:bg-red-900/70 text-red-100 transition-colors focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 focus:ring-offset-[var(--background)]"
               >
                 Dismiss
               </button>
               <button
                 type="button"
                 onClick={() => { setError(null); doScan(); }}
-                className="px-3 py-1.5 rounded text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+                className="px-3 py-1.5 rounded text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-[var(--background)]"
               >
                 Retry
               </button>
@@ -783,52 +823,69 @@ function HomeContent() {
                 . No new scan was run.
               </div>
             )}
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => downloadResultsPdf(result.resultA, result.resultB)}
+                className="px-4 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium border border-zinc-600 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2 focus:ring-offset-[var(--background)]"
+                aria-label="Download results as PDF"
+              >
+                Download PDF
+              </button>
+            </div>
             <ResultsByCategory resultA={result.resultA} resultB={result.resultB} />
 
             <section className="px-4 py-3 border-t border-zinc-700/60">
               <h3 className="font-medium text-white text-sm mb-3">Structured data breakdown (JSON-LD only)</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className={`grid gap-4 ${result.resultB ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1 max-w-md"}`}>
                 <StructuredDataBreakdownCard
                   breakdown={result.resultA.structuredDataBreakdown}
                   domainLabel={result.resultA.domain}
                 />
-                <StructuredDataBreakdownCard
-                  breakdown={result.resultB.structuredDataBreakdown}
-                  domainLabel={result.resultB.domain}
-                />
+                {result.resultB && (
+                  <StructuredDataBreakdownCard
+                    breakdown={result.resultB.structuredDataBreakdown}
+                    domainLabel={result.resultB.domain}
+                  />
+                )}
               </div>
             </section>
 
-            {(result.resultA.investorQuestionCoverage ?? result.resultB.investorQuestionCoverage) && (
+            {(result.resultA.investorQuestionCoverage || result.resultB?.investorQuestionCoverage) && (
               <section className="px-4 py-3 border-t border-zinc-700/60">
                 <InvestorQuestionTable
                   resultsA={result.resultA.investorQuestionCoverage?.questionResults ?? []}
-                  resultsB={result.resultB.investorQuestionCoverage?.questionResults ?? []}
+                  resultsB={result.resultB?.investorQuestionCoverage?.questionResults ?? null}
                   domainLabelA={result.resultA.domain}
-                  domainLabelB={result.resultB.domain}
+                  domainLabelB={result.resultB?.domain ?? null}
                 />
               </section>
             )}
 
-            <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <section className={result.resultB ? "grid grid-cols-1 md:grid-cols-2 gap-8" : "space-y-8"}>
               <FindingsTable
                 findings={result.resultA.findings}
                 domainLabel={result.resultA.domain}
               />
-              <FindingsTable
-                findings={result.resultB.findings}
-                domainLabel={result.resultB.domain}
-              />
+              {result.resultB && (
+                <FindingsTable
+                  findings={result.resultB.findings}
+                  domainLabel={result.resultB.domain}
+                />
+              )}
             </section>
           </div>
         )}
 
         {!result && !loading && (
           <p className="text-zinc-500 text-sm">
-            Enter two domains and click Compare. Each site is checked by fetching the homepage,
+            Enter at least one domain and click Scan, or two to Compare. Each site is checked by fetching the homepage,
             IR paths (/investor, /ir), robots.txt, and sitemap (no deep crawl), then analyzed for
-            crawlability, structured data, parseability, freshness, and IR completeness. Results are
-            stored in the database.
+            crawlability, structured data, parseability, freshness, and IR completeness.{" "}
+            <Link href="/methodology" className="text-emerald-400 hover:text-emerald-300 underline">
+              How we score
+            </Link>
+            .
           </p>
         )}
 
@@ -841,6 +898,9 @@ function HomeContent() {
           </Link>
           <p className="text-zinc-500 text-xs mt-1">
             How we calculate Overall readiness, AI Citation Readiness, category scores, and investor question coverage.
+          </p>
+          <p className="text-zinc-500 text-xs mt-1">
+            Scans are rate-limited; results may be cached.
           </p>
         </footer>
       </main>

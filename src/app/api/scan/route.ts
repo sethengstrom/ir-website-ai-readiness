@@ -77,23 +77,26 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const domainA = normalizeDomainInput(body.domainA ?? "");
-    const domainB = normalizeDomainInput(body.domainB ?? "");
+    const domainBRaw = body.domainB != null ? normalizeDomainInput(String(body.domainB).trim()) : "";
+    const domainB = domainBRaw || "";
+    const singleDomain = !domainB;
 
-    if (!domainA || !domainB) {
+    if (!domainA) {
       return errorResponse(
         SCAN_ERROR_CODES.INVALID_DOMAIN,
-        "domainA and domainB are required and must be valid.",
+        "domainA is required and must be valid.",
         400
       );
     }
 
-    if (USE_CACHE) {
+    if (USE_CACHE && !singleDomain) {
       const cacheCutoff = new Date();
       cacheCutoff.setDate(cacheCutoff.getDate() - CACHE_DAYS);
       const cached = await prisma.scanRun.findFirst({
         where: {
           status: "completed",
           finishedAt: { not: null, gte: cacheCutoff },
+          domainB: { not: "" },
           OR: [{ domainA, domainB }, { domainA: domainB, domainB: domainA }],
         },
         orderBy: { finishedAt: "desc" },
@@ -112,7 +115,7 @@ export async function POST(request: NextRequest) {
     const run = await prisma.scanRun.create({
       data: {
         domainA,
-        domainB,
+        domainB: domainB || "",
         status: "running",
       },
     });
@@ -127,14 +130,13 @@ export async function POST(request: NextRequest) {
           send({
             type: "progress",
             phase: "crawling",
-            message: "Crawling Domain A & B…",
+            message: singleDomain ? "Crawling domain…" : "Crawling Domain A & B…",
             progress: 15,
           });
 
-          const crawlPromise = Promise.all([
-            crawlDomain(domainA),
-            crawlDomain(domainB),
-          ]);
+          const crawlPromise = singleDomain
+            ? crawlDomain(domainA).then((r) => [r, null] as const)
+            : Promise.all([crawlDomain(domainA), crawlDomain(domainB)]).then(([a, b]) => [a, b] as const);
           const timeoutPromise = new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error("SCAN_TIMEOUT")), SCAN_TIMEOUT_MS)
           );
@@ -151,7 +153,7 @@ export async function POST(request: NextRequest) {
           });
 
           const resultA = analyzeDomain(crawlResultA);
-          const resultB = analyzeDomain(crawlResultB);
+          const resultB = crawlResultB != null ? analyzeDomain(crawlResultB) : null;
 
           await prisma.scanRun.update({
             where: { id: run.id },
@@ -159,7 +161,7 @@ export async function POST(request: NextRequest) {
               status: "completed",
               finishedAt: new Date(),
               resultA: JSON.stringify(resultA),
-              resultB: JSON.stringify(resultB),
+              resultB: resultB != null ? JSON.stringify(resultB) : null,
             },
           });
 

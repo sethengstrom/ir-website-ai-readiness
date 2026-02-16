@@ -25,7 +25,7 @@ export default function MethodologyPage() {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-8 space-y-10">
+      <main id="main-content" className="max-w-3xl mx-auto px-4 py-8 space-y-10" tabIndex={-1}>
         <section>
           <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Overview</h2>
           <p className="text-[var(--muted)] text-sm leading-relaxed">
