@@ -12,7 +12,9 @@ import type { SitemapResult } from "./sitemap";
 const FETCH_TIMEOUT_MS = 12000;
 const MAX_PHASE1 = 4;
 const MAX_FOLLOWUP = 2;
-const USER_AGENT = "IR-AI-Readiness-Scanner/1.0";
+/** Browser-like UA so IR sites (e.g. Ciena) don't block or throttle server requests. */
+const USER_AGENT =
+  "Mozilla/5.0 (compatible; IR-AI-Readiness-Scanner/1.0; +https://github.com/ir-ai-readiness) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36";
 const RETRY_MAX = 2;
 const RETRY_BASE_MS = 500;
 /** Max response body size (2MB) to avoid OOM on very large pages. */
@@ -216,11 +218,11 @@ async function fetchOne(
         headers,
         signal: controller.signal,
       });
-      clearTimeout(timeoutId);
       const responseTimeMs = Date.now() - start;
       const contentType = res.headers.get("content-type") || "";
       const lastModified = res.headers.get("last-modified");
       const body = await readTextWithLimit(res, MAX_BODY_BYTES);
+      clearTimeout(timeoutId);
       lastResult = {
         status: res.status,
         contentType,
@@ -243,6 +245,18 @@ async function fetchOne(
   return lastResult;
 }
 
+function emptyCrawlResult(origin: string): CrawlResult {
+  const base = origin.replace(/\/$/, "");
+  return {
+    origin: base,
+    robots: { reachable: false, disallowsInvestors: false, disallowsInvestorRelations: false, rawContent: null, sitemapUrls: [] },
+    sitemap: { reachable: false, urlCount: 0, irUrlCount: 0, urls: [], irUrls: [], childSitemaps: [] },
+    pages: [],
+    urlsFromCrawl: [],
+    irUrlsFromCrawl: [],
+  };
+}
+
 export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
   let origin: string;
   if (domainInput.startsWith("http")) {
@@ -254,6 +268,7 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
   }
   const base = origin.replace(/\/$/, "");
 
+  try {
   const phase1Urls: { url: string; acceptHtmlOnly: boolean }[] = [
     { url: `${base}/`, acceptHtmlOnly: true },
     { url: `${base}/robots.txt`, acceptHtmlOnly: false },
@@ -391,4 +406,8 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
     urlsFromCrawl,
     irUrlsFromCrawl,
   };
+  } catch (e) {
+    console.error("[crawler] crawlDomain error for", base, e);
+    return emptyCrawlResult(origin);
+  }
 }
