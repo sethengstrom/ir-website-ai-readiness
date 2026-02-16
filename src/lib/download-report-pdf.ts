@@ -16,8 +16,13 @@ const CATEGORY_ITEMS = [
   { key: "irChecklist" as const, label: "IR checklist" },
 ];
 
+/** ASCII-safe text for PDF (Helvetica has no Unicode symbols). */
 function sanitize(text: string): string {
-  return String(text).replace(/[\u0000-\u001F\u007F-\u009F]/g, " ").trim() || "—";
+  return String(text)
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, " ")
+    .replace(/\u2014/g, "-")
+    .replace(/\u203A/g, ">")
+    .trim() || "N/A";
 }
 
 function shortDomain(url: string, maxLen = 45): string {
@@ -74,11 +79,11 @@ export function downloadResultsPdf(resultA: DomainResult, resultB: DomainResult 
   const overallBody = resultB
     ? [
         ["Overall readiness", String(resultA.overallScore), String(resultB.overallScore)],
-        ["AI Citation", String(resultA.aiCitationReadiness ?? "—"), String(resultB.aiCitationReadiness ?? "—")],
+        ["AI Citation", String(resultA.aiCitationReadiness ?? "N/A"), String(resultB.aiCitationReadiness ?? "N/A")],
       ]
     : [
         ["Overall readiness", String(resultA.overallScore)],
-        ["AI Citation", String(resultA.aiCitationReadiness ?? "—")],
+        ["AI Citation", String(resultA.aiCitationReadiness ?? "N/A")],
       ];
 
   autoTable(doc, {
@@ -114,7 +119,10 @@ export function downloadResultsPdf(resultA: DomainResult, resultB: DomainResult 
   });
   y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
 
-  // Criteria (pass/fail) per category — green ✓ = Pass, red ✗ = Fail
+  // Criteria (pass/fail) per category - use words so PDF renders correctly (no Unicode symbols)
+  const PASS = "Pass";
+  const FAIL = "Fail";
+  const NA = "N/A";
   const GREEN_PASS = [34, 197, 94] as [number, number, number];
   const RED_FAIL = [220, 38, 38] as [number, number, number];
   const GRAY_NA = [63, 63, 70] as [number, number, number];
@@ -124,7 +132,7 @@ export function downloadResultsPdf(resultA: DomainResult, resultB: DomainResult 
   doc.text("Criteria (pass/fail by domain)", 14, y);
   doc.setFontSize(8);
   doc.setTextColor(0, 0, 0);
-  doc.text("Green ✓ = Pass, Red ✗ = Fail", 14, y + 5);
+  doc.text("Green = Pass, Red = Fail, Gray = N/A", 14, y + 5);
   y += 12;
 
   for (const { key, label } of CATEGORY_ITEMS) {
@@ -147,10 +155,10 @@ export function downloadResultsPdf(resultA: DomainResult, resultB: DomainResult 
     const criteriaRows = allLabels.map((signal) => {
       const a = criteriaA.find((c) => c.label === signal);
       const b = resultB ? criteriaB.find((c) => c.label === signal) : null;
-      const passA = a ? (a.passed ? "✓" : "✗") : "—";
-      const passB = resultB ? (b ? (b.passed ? "✓" : "✗") : "—") : null;
+      const passA = a ? (a.passed ? PASS : FAIL) : NA;
+      const passB = resultB ? (b ? (b.passed ? PASS : FAIL) : NA) : null;
       const row = [sanitize(signal.slice(0, 50)), passA];
-      if (resultB) row.push(passB ?? "—");
+      if (resultB) row.push(passB ?? NA);
       return row;
     });
 
@@ -170,10 +178,10 @@ export function downloadResultsPdf(resultA: DomainResult, resultB: DomainResult 
         if (!passFailColIndices.includes(colIdx)) return;
         const raw = data.cell?.raw as string | undefined;
         const text = (raw ?? String(data.cell?.text ?? "")).trim();
-        if (text === "✓") {
+        if (text === PASS) {
           data.cell.styles.fillColor = GREEN_PASS;
           data.cell.styles.textColor = WHITE;
-        } else if (text === "✗") {
+        } else if (text === FAIL) {
           data.cell.styles.fillColor = RED_FAIL;
           data.cell.styles.textColor = WHITE;
         } else {
@@ -187,7 +195,7 @@ export function downloadResultsPdf(resultA: DomainResult, resultB: DomainResult 
 
   y += 4;
 
-  // Investor question coverage — use ✓ ◐ — like the page
+  // Investor question coverage - use words for PDF (no Unicode symbols)
   const coverageA = resultA.investorQuestionCoverage;
   if (coverageA?.questionResults?.length) {
     y = maybeNewPage(doc, y, 30);
@@ -195,19 +203,19 @@ export function downloadResultsPdf(resultA: DomainResult, resultB: DomainResult 
     doc.text("Investor question coverage", 14, y);
     y += 6;
     doc.setFontSize(8);
-    doc.text("✓ Answerable, ◐ Partial, — Not answerable", 14, y);
+    doc.text("Answerable = found; Partial = some evidence; Not = not answerable", 14, y);
     y += 8;
 
     const qHeaders = resultB
       ? ["#", "Question", "Domain A", "Domain B"]
       : ["#", "Question", "Status"];
-    const statusSymbol = (s: string) => (s === "answerable" ? "✓" : s === "partial" ? "◐" : "—");
+    const statusLabel = (s: string) => (s === "answerable" ? "Answerable" : s === "partial" ? "Partial" : "Not");
     const qBody = coverageA.questionResults.map((r, i) => {
       if (resultB) {
         const rb = resultB.investorQuestionCoverage?.questionResults?.find((x) => x.id === r.id);
-        return [String(i + 1), sanitize(r.question.slice(0, 55)), statusSymbol(r.status), rb ? statusSymbol(rb.status) : "—"];
+        return [String(i + 1), sanitize(r.question.slice(0, 55)), statusLabel(r.status), rb ? statusLabel(rb.status) : "N/A"];
       }
-      return [String(i + 1), sanitize(r.question.slice(0, 55)), statusSymbol(r.status)];
+      return [String(i + 1), sanitize(r.question.slice(0, 55)), statusLabel(r.status)];
     });
 
     autoTable(doc, {
@@ -281,7 +289,7 @@ export function downloadResultsPdf(resultA: DomainResult, resultB: DomainResult 
   doc.setFontSize(8);
   doc.setTextColor(128, 128, 128);
   doc.text(
-    "IR AI Readiness Scanner — Compare domains for investor relations AI/agent retrieval signals. Methodology: scan results may be cached.",
+    "IR AI Readiness Scanner - Compare domains for investor relations AI/agent retrieval signals. Methodology: scan results may be cached.",
     14,
     287,
     { maxWidth: pageWidth - 28 }
