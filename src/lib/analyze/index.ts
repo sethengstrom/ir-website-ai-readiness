@@ -1,5 +1,5 @@
 import type { CrawlResult } from "../crawler";
-import type { DomainResult, CategoryScores } from "../types";
+import type { DomainResult, CategoryScores, StructuredDataBreakdown, Finding } from "../types";
 import { extractFaviconUrl } from "../favicon";
 import { extractDomainDisplay } from "../url-utils";
 import { analyzeCrawlability } from "./crawlability";
@@ -8,15 +8,65 @@ import { analyzeParseability } from "./parseability";
 import { analyzeFreshness } from "./freshness";
 import { analyzeIRChecklist } from "./ir-checklist";
 import { analyzeResponseMetrics } from "./response-metrics";
-import { analyzeInvestorQuestionCoverage } from "./investor-questions";
+import { analyzeInvestorQuestionCoverage, getUnavailableInvestorCoverage } from "./investor-questions";
+
+const DEFAULT_CATEGORY_SCORE = 0;
+const EMPTY_FINDINGS: Finding[] = [];
+const UNAVAILABLE_STRUCTURED_BREAKDOWN: StructuredDataBreakdown = {
+  structuredDataScore: 0,
+  jsonLdBlockCount: 0,
+  detectedTypes: [],
+  missingRecommendedTypes: [
+    "Organization or Corporation",
+    "WebSite",
+    "WebPage",
+    "FAQPage",
+    "NewsArticle",
+    "Event",
+    "BreadcrumbList",
+  ],
+};
+
+function runAnalyzer<T>(name: string, fn: () => T, fallback: T): T {
+  try {
+    return fn();
+  } catch (e) {
+    console.error(`[analyze] ${name} failed:`, e);
+    return fallback;
+  }
+}
 
 export function analyzeDomain(result: CrawlResult): DomainResult {
-  const crawlability = analyzeCrawlability(result);
-  const structuredData = analyzeStructuredData(result.pages, result.origin);
-  const parseability = analyzeParseability(result.pages);
-  const freshness = analyzeFreshness(result.pages);
-  const irChecklist = analyzeIRChecklist(result.pages);
-  const responseMetrics = analyzeResponseMetrics(result.pages);
+  const crawlability = runAnalyzer(
+    "crawlability",
+    () => analyzeCrawlability(result),
+    { score: DEFAULT_CATEGORY_SCORE, findings: EMPTY_FINDINGS }
+  );
+  const structuredData = runAnalyzer(
+    "structuredData",
+    () => analyzeStructuredData(result.pages, result.origin),
+    { score: DEFAULT_CATEGORY_SCORE, findings: EMPTY_FINDINGS, breakdown: UNAVAILABLE_STRUCTURED_BREAKDOWN }
+  );
+  const parseability = runAnalyzer(
+    "parseability",
+    () => analyzeParseability(result.pages),
+    { score: DEFAULT_CATEGORY_SCORE, findings: EMPTY_FINDINGS }
+  );
+  const freshness = runAnalyzer(
+    "freshness",
+    () => analyzeFreshness(result.pages),
+    { score: DEFAULT_CATEGORY_SCORE, findings: EMPTY_FINDINGS }
+  );
+  const irChecklist = runAnalyzer(
+    "irChecklist",
+    () => analyzeIRChecklist(result.pages),
+    { score: DEFAULT_CATEGORY_SCORE, findings: EMPTY_FINDINGS }
+  );
+  const responseMetrics = runAnalyzer(
+    "responseMetrics",
+    () => analyzeResponseMetrics(result.pages),
+    { findings: EMPTY_FINDINGS }
+  );
 
   const categoryScores: CategoryScores = {
     crawlability: crawlability.score,
@@ -35,7 +85,6 @@ export function analyzeDomain(result: CrawlResult): DomainResult {
     ...responseMetrics.findings,
   ];
 
-  // Overall AI Readiness: category blend (still shown as secondary). Adjust weights if rebalancing.
   const overallWeights = {
     crawlability: 0.2,
     structuredData: 0.2,
@@ -51,8 +100,11 @@ export function analyzeDomain(result: CrawlResult): DomainResult {
       categoryScores.irChecklist * overallWeights.irChecklist
   );
 
-  // AI Citation Readiness (primary): 70% question coverage, 20% crawl/parse, 10% structured data.
-  const investorQuestionCoverage = analyzeInvestorQuestionCoverage(result.pages);
+  const investorQuestionCoverage = runAnalyzer(
+    "investorQuestionCoverage",
+    () => analyzeInvestorQuestionCoverage(result.pages),
+    getUnavailableInvestorCoverage()
+  );
   const aiCitationReadiness = Math.round(
     investorQuestionCoverage.coverageScore * 0.7 +
       ((crawlability.score + parseability.score) / 2) * 0.2 +

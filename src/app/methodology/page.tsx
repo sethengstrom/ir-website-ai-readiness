@@ -34,14 +34,17 @@ export default function MethodologyPage() {
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-white mb-2">Primary score: AI Citation Readiness</h2>
+          <h2 className="text-lg font-semibold text-white mb-2">Primary score: Overall readiness</h2>
           <p className="text-zinc-400 text-sm leading-relaxed mb-3">
-            The main number shown is <strong className="text-zinc-300">AI Citation Readiness</strong>. It is weighted to reflect how likely an AI system is to find and cite your IR content when answering investor questions.
+            The main number shown is <strong className="text-zinc-300">Overall readiness</strong>: a weighted blend of the five category scores (Crawlability, Structured data, Parseability, Freshness, IR checklist). So the big number aligns with the category rows—if all five categories are high, Overall readiness is high.
+          </p>
+          <p className="text-zinc-400 text-sm leading-relaxed mb-3">
+            We also show <strong className="text-zinc-300">AI Citation Readiness</strong> as a secondary metric (under the main number). It is weighted for how likely an AI system is to find and cite your IR content when answering investor questions:
           </p>
           <ul className="list-disc list-inside text-zinc-400 text-sm space-y-1 ml-2">
             <li><strong className="text-zinc-300">70%</strong> — Investor question coverage (share of 12 high-impact questions that are answerable or partially answerable from fetched pages)</li>
-            <li><strong className="text-zinc-300">20%</strong> — Crawlability and parseability (average of the two category scores; can the site be reached and read?)</li>
-            <li><strong className="text-zinc-300">10%</strong> — Structured data (JSON-LD + feeds; helps agents cite with correct attribution and dates)</li>
+            <li><strong className="text-zinc-300">20%</strong> — Crawlability and parseability (average of the two category scores)</li>
+            <li><strong className="text-zinc-300">10%</strong> — Structured data (JSON-LD + feeds)</li>
           </ul>
         </section>
 
@@ -90,13 +93,13 @@ export default function MethodologyPage() {
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-white mb-2">Category scores (Overall AI Readiness)</h2>
+          <h2 className="text-lg font-semibold text-white mb-2">Category scores (feed into Overall readiness)</h2>
           <p className="text-zinc-400 text-sm leading-relaxed mb-3">
-            The secondary “Overall AI Readiness” score is a weighted blend of five categories. Each category is 0–100; the blend is:
+            The five category scores below are 0–100 each. Their weighted blend is the primary Overall readiness number. Weights:
           </p>
           <ul className="list-disc list-inside text-zinc-400 text-sm space-y-1 ml-2 mb-4">
             <li><strong className="text-zinc-300">Crawlability (20%)</strong> — robots.txt reachable, /investors and /investor-relations not disallowed, sitemap reachable, IR-related URLs discovered.</li>
-            <li><strong className="text-zinc-300">Structured data (20%)</strong> — JSON-LD schema types (Organization, WebPage, Event, etc.), machine-readable dates, Organization identity, RSS/Atom feeds. The “Structured Data Score” shown in the UI is JSON-LD only (no feeds).</li>
+            <li><strong className="text-zinc-300">Structured data (20%)</strong> — JSON-LD schema types (Organization, WebPage, Event, etc.), machine-readable dates, Organization identity, RSS/Atom feeds. The table row shows this full category score; the caption under that row also shows “JSON-LD only” for transparency.</li>
             <li><strong className="text-zinc-300">Parseability (20%)</strong> — Server-rendered text length, main-content ratio, H1/H2 structure, canonical URL, title and meta description.</li>
             <li><strong className="text-zinc-300">Freshness (15%)</strong> — Earnings/results hub detected, visible or schema date on that hub (so AI can cite recency), dates on other pages, archive/releases-style URLs.</li>
             <li><strong className="text-zinc-300">IR checklist (25%)</strong> — Presence of filings (SEC/EDGAR or SEDAR+), investor presentation, press releases, events/webcasts, IR contact, governance/ESG links.</li>
@@ -109,7 +112,7 @@ export default function MethodologyPage() {
         <section>
           <h2 className="text-lg font-semibold text-white mb-2">Structured data (JSON-LD) breakdown</h2>
           <p className="text-zinc-400 text-sm leading-relaxed">
-            The “Structured Data Score” (JSON-LD only) is computed from: presence of application/ld+json, valid parse, @context, @type, coverage of recommended IR types (Organization or Corporation, WebSite, WebPage, FAQPage, NewsArticle, Event, BreadcrumbList), and field completeness (name, url, datePublished, headline, description, sameAs, logo). Feeds are not included in this score; they are part of the blended “Structured data” category score used in Overall AI Readiness.
+            The “JSON-LD only” value (shown in the Structured data row caption) is computed from: presence of application/ld+json, valid parse, @context, @type, coverage of recommended IR types (Organization or Corporation, WebSite, WebPage, FAQPage, NewsArticle, Event, BreadcrumbList), and field completeness (name, url, datePublished, headline, description, sameAs, logo). Feeds are not included in that value; they are part of the full “Structured data” category score that feeds into Overall readiness.
           </p>
         </section>
 

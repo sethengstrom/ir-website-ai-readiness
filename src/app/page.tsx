@@ -85,15 +85,9 @@ function CategoryRows({
       {CATEGORY_ITEMS.map(({ key, label }) => {
         const ctx = CATEGORY_CONTEXT[key];
         if (!ctx) return null;
-        // Structured data row shows JSON-LD-only score (breakdown); others use category score
-        const scoreA =
-          key === "structuredData" && resultA.structuredDataBreakdown != null
-            ? resultA.structuredDataBreakdown.structuredDataScore
-            : (resultA.categoryScores[key] ?? 0);
-        const scoreB =
-          key === "structuredData" && resultB.structuredDataBreakdown != null
-            ? resultB.structuredDataBreakdown.structuredDataScore
-            : (resultB.categoryScores[key] ?? 0);
+        // Use category score for all rows so the 5 numbers match what feeds into Overall readiness
+        const scoreA = resultA.categoryScores[key] ?? 0;
+        const scoreB = resultB.categoryScores[key] ?? 0;
         const criteriaA = getCategoryFindingsForDomain(key, resultA.findings ?? []);
         const criteriaB = getCategoryFindingsForDomain(key, resultB.findings ?? []);
         const hasCriteria = criteriaA.length > 0 || criteriaB.length > 0;
@@ -116,7 +110,7 @@ function CategoryRows({
               </p>
               {key === "structuredData" && (
                 <p className="text-xs text-zinc-500 mt-0.5">
-                  <span className="font-medium text-zinc-500">This row:</span> Structured Data Score (JSON-LD only). Overall AI Readiness above uses category score that includes feeds.
+                  <span className="font-medium text-zinc-500">This row:</span> Category score (includes feeds). JSON-LD only: {resultA.structuredDataBreakdown?.structuredDataScore ?? "—"} / {resultB.structuredDataBreakdown?.structuredDataScore ?? "—"}
                 </p>
               )}
               {hasCriteria && (
@@ -223,17 +217,17 @@ function ResultsByCategory({
           </div>
         </div>
         <div className="flex flex-col items-center gap-1 min-w-[7rem]">
-          <span className="text-xs text-zinc-500 font-medium">AI Citation Readiness</span>
+          <span className="text-xs text-zinc-500 font-medium">Overall readiness</span>
           <div className="flex items-center gap-6">
-            <span className={`text-5xl font-bold tabular-nums w-14 text-right ${scoreColorClass(resultA.aiCitationReadiness ?? resultA.overallScore)}`}>
-              {resultA.aiCitationReadiness ?? resultA.overallScore}
+            <span className={`text-5xl font-bold tabular-nums w-14 text-right ${scoreColorClass(resultA.overallScore)}`}>
+              {resultA.overallScore}
             </span>
             <span className="text-zinc-500 text-sm font-medium shrink-0">vs</span>
-            <span className={`text-5xl font-bold tabular-nums w-14 text-left ${scoreColorClass(resultB.aiCitationReadiness ?? resultB.overallScore)}`}>
-              {resultB.aiCitationReadiness ?? resultB.overallScore}
+            <span className={`text-5xl font-bold tabular-nums w-14 text-left ${scoreColorClass(resultB.overallScore)}`}>
+              {resultB.overallScore}
             </span>
           </div>
-          <span className="text-[10px] text-zinc-500">Overall readiness: {resultA.overallScore} vs {resultB.overallScore}</span>
+          <span className="text-[10px] text-zinc-500">AI Citation: {resultA.aiCitationReadiness ?? "—"} vs {resultB.aiCitationReadiness ?? "—"}</span>
         </div>
         <div className="flex items-center gap-2 min-w-0 justify-end">
           {resultB.faviconUrl && (
@@ -760,7 +754,7 @@ function HomeContent() {
             Scoring methodology
           </Link>
           <p className="text-zinc-500 text-xs mt-1">
-            How we calculate AI Citation Readiness, category scores, and investor question coverage.
+            How we calculate Overall readiness, AI Citation Readiness, category scores, and investor question coverage.
           </p>
         </footer>
       </main>

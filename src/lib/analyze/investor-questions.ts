@@ -343,3 +343,14 @@ export function analyzeInvestorQuestionCoverage(pages: CrawlPage[]): InvestorQue
     coverageScore: Math.min(100, coverageScore),
   };
 }
+
+/** Fallback when investor-question analysis throws (graceful degradation). */
+export function getUnavailableInvestorCoverage(): InvestorQuestionCoverage {
+  const questionResults: InvestorQuestionResult[] = INVESTOR_QUESTIONS.map(({ id, question }) => ({
+    id,
+    question,
+    status: "not_answerable" as const,
+    explanation: "Unavailable (analysis error).",
+  }));
+  return { questionResults, coverageScore: 0 };
+}
