@@ -252,9 +252,9 @@ function ResultsByCategory({
 }) {
   return (
     <section className="rounded-xl border border-zinc-700/60 bg-zinc-900/40 overflow-hidden">
-      {/* Overall strip - compact, scores aligned */}
-      <div className="grid grid-cols-[1fr_auto_1fr] gap-4 p-4 border-b border-zinc-700/60 bg-zinc-800/30 items-center">
-        <div className="flex items-center gap-2 min-w-0">
+      {/* Overall strip: stacked on small screens, 3-col on md+ */}
+      <div className="grid grid-cols-2 md:grid-cols-[1fr_auto_1fr] gap-3 md:gap-4 p-4 border-b border-zinc-700/60 bg-zinc-800/30 items-center">
+        <div className="flex items-center gap-2 min-w-0 order-2 md:order-1">
           {resultA.faviconUrl && (
             <img
               src={resultA.faviconUrl}
@@ -274,7 +274,7 @@ function ResultsByCategory({
             </span>
           </div>
         </div>
-        <div className="flex flex-col items-center gap-1 min-w-[7rem]">
+        <div className="col-span-2 md:col-span-1 flex flex-col items-center gap-1 min-w-0 md:min-w-[7rem] order-1 md:order-2">
           <span className="text-xs text-zinc-500 font-medium flex items-center gap-1.5 flex-wrap justify-center">
             Overall readiness
             <Link
@@ -284,18 +284,18 @@ function ResultsByCategory({
               How we score
             </Link>
           </span>
-          <div className="flex items-center gap-6">
-            <span className={`text-5xl font-bold tabular-nums w-14 text-right ${scoreColorClass(resultA.overallScore)}`}>
+          <div className="flex items-center gap-4 md:gap-6">
+            <span className={`text-4xl md:text-5xl font-bold tabular-nums text-right ${scoreColorClass(resultA.overallScore)}`}>
               {resultA.overallScore}
             </span>
             <span className="text-zinc-500 text-sm font-medium shrink-0">vs</span>
-            <span className={`text-5xl font-bold tabular-nums w-14 text-left ${scoreColorClass(resultB.overallScore)}`}>
+            <span className={`text-4xl md:text-5xl font-bold tabular-nums text-left ${scoreColorClass(resultB.overallScore)}`}>
               {resultB.overallScore}
             </span>
           </div>
           <span className="text-[10px] text-zinc-500">AI Citation: {resultA.aiCitationReadiness ?? "—"} vs {resultB.aiCitationReadiness ?? "—"}</span>
         </div>
-        <div className="flex items-center gap-2 min-w-0 justify-end">
+        <div className="flex items-center gap-2 min-w-0 justify-end order-3 md:order-3">
           {resultB.faviconUrl && (
             <img
               src={resultB.faviconUrl}
@@ -412,11 +412,11 @@ function InvestorQuestionTable({
         </p>
       </div>
       <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm min-w-[640px]">
           <thead className="sticky top-0 bg-zinc-800/95 text-zinc-400 text-left z-10">
             <tr>
-              <th className="px-4 py-2 w-8" rowSpan={2}>#</th>
-              <th className="px-4 py-2 min-w-[180px]" rowSpan={2}>Question</th>
+              <th className="sticky left-0 z-20 w-8 bg-zinc-800/95 px-4 py-2" rowSpan={2}>#</th>
+              <th className="sticky left-[4rem] z-20 min-w-[180px] bg-zinc-800/95 px-4 py-2 shadow-[2px_0_4px_rgba(0,0,0,0.15)]" rowSpan={2}>Question</th>
               <th colSpan={2} className="px-4 py-2 text-center font-semibold text-white bg-emerald-900/30 border-l border-zinc-600/60">
                 {domainLabelA}
               </th>
@@ -435,9 +435,9 @@ function InvestorQuestionTable({
             {rows.map((ra, i) => {
               const rb = getB(ra.id);
               return (
-                <tr key={ra.id} className="border-t border-zinc-700/40 hover:bg-zinc-800/40">
-                  <td className="px-4 py-2 text-zinc-500 tabular-nums">{i + 1}</td>
-                  <td className="px-4 py-2 text-zinc-300">{ra.question}</td>
+                <tr key={ra.id} className="group border-t border-zinc-700/40 hover:bg-zinc-800/40">
+                  <td className="sticky left-0 z-10 w-8 bg-zinc-900/40 group-hover:bg-zinc-800/40 px-4 py-2 text-zinc-500 tabular-nums">{i + 1}</td>
+                  <td className="sticky left-[4rem] z-10 min-w-[180px] bg-zinc-900/40 group-hover:bg-zinc-800/40 px-4 py-2 text-zinc-300 shadow-[2px_0_4px_rgba(0,0,0,0.15)]">{ra.question}</td>
                   <td className={`px-4 py-2 font-medium border-l border-zinc-700/60 bg-emerald-950/20 ${statusColorClass(ra.status)}`}>{statusLabel(ra.status)}</td>
                   <td className="px-4 py-2 text-zinc-400 text-xs bg-emerald-950/20">
                     {ra.pageType && <span className="block text-[10px] text-zinc-500 uppercase tracking-wide mb-0.5">{ra.pageType}</span>}
@@ -671,8 +671,8 @@ function HomeContent() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
-        <form onSubmit={handleSubmit} className="flex flex-wrap gap-4 items-end mb-8">
-          <div className="flex-1 min-w-[200px]">
+        <form onSubmit={handleSubmit} className="flex flex-col md:flex-row md:flex-wrap gap-4 md:items-end mb-8">
+          <div className="w-full md:flex-1 md:min-w-[200px] min-w-0">
             <label className="block text-sm text-zinc-400 mb-1">Domain A</label>
             <input
               type="text"
@@ -682,14 +682,14 @@ function HomeContent() {
               className="w-full px-4 py-2.5 rounded-lg bg-zinc-800 border border-zinc-600 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500"
               disabled={loading}
             />
-            <div className="flex flex-wrap gap-1.5 mt-2">
+            <div className="flex flex-wrap gap-1.5 mt-2 min-w-0">
               {PRESET_IR_SITES.slice(0, 6).map(({ name, url }) => (
                 <button
                   key={`a-${name}`}
                   type="button"
                   onClick={() => setDomainA(url)}
                   disabled={loading}
-                  className="px-2.5 py-1 rounded text-xs font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-200 disabled:opacity-50 transition-colors"
+                  className="px-2.5 py-1 rounded text-xs font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-200 disabled:opacity-50 transition-colors shrink-0"
                 >
                   {name}
                 </button>
@@ -699,11 +699,11 @@ function HomeContent() {
           <button
             type="submit"
             disabled={loading}
-            className="px-6 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0 self-center"
+            className="w-full md:w-auto px-6 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0 md:self-center"
           >
             {loading ? "Scanning…" : "Compare"}
           </button>
-          <div className="flex-1 min-w-[200px]">
+          <div className="w-full md:flex-1 md:min-w-[200px] min-w-0">
             <label className="block text-sm text-zinc-400 mb-1">Domain B</label>
             <input
               type="text"
@@ -713,14 +713,14 @@ function HomeContent() {
               className="w-full px-4 py-2.5 rounded-lg bg-zinc-800 border border-zinc-600 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500"
               disabled={loading}
             />
-            <div className="flex flex-wrap gap-1.5 mt-2">
+            <div className="flex flex-wrap gap-1.5 mt-2 min-w-0">
               {PRESET_IR_SITES.slice(6, 9).map(({ name, url }) => (
                 <button
                   key={`b-${name}`}
                   type="button"
                   onClick={() => setDomainB(url)}
                   disabled={loading}
-                  className="px-2.5 py-1 rounded text-xs font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-200 disabled:opacity-50 transition-colors"
+                  className="px-2.5 py-1 rounded text-xs font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-200 disabled:opacity-50 transition-colors shrink-0"
                 >
                   {name}
                 </button>
