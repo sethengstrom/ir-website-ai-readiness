@@ -287,15 +287,9 @@ function ResultsByCategory({
         </div>
       </div>
       <div className={`flex flex-col items-center gap-1 min-w-0 ${singleDomain ? "" : "col-span-2 md:col-span-1"} md:min-w-[7rem] order-1 md:order-2`}>
-        <span className="text-sm text-zinc-500 font-medium flex items-center gap-1.5 flex-wrap justify-center">
-          Overall readiness
-          <Link
-            href="/methodology"
-            className="text-sm text-emerald-400/80 hover:text-emerald-400 underline"
-          >
-            How we score
-          </Link>
-        </span>
+        <span className="text-sm text-zinc-500 font-medium">
+            Overall readiness
+          </span>
         <div className="flex items-center gap-4 md:gap-6">
           <span className={`text-4xl md:text-5xl font-bold tabular-nums ${singleDomain ? "" : "text-right"} ${scoreColorClass(resultA.overallScore)}`}>
             {resultA.overallScore}
@@ -313,12 +307,6 @@ function ResultsByCategory({
           AI Citation: {resultA.aiCitationReadiness ?? "—"}
           {!singleDomain && ` vs ${resultB!.aiCitationReadiness ?? "—"}`}
         </span>
-        <p className="text-xs text-zinc-500 text-center mt-0.5">
-          Based on crawlability, structured data, parseability, freshness, and IR checklist.{" "}
-          <Link href="/methodology" className="text-emerald-400/80 hover:text-emerald-400 underline">
-            Methodology
-          </Link>
-        </p>
       </div>
       {!singleDomain && (
         <div className="flex items-center gap-2 min-w-0 justify-end order-3 md:order-3">
@@ -739,11 +727,6 @@ function HomeContent() {
             <h2 className="font-semibold text-[var(--foreground)] mb-1">{AEO_INTRO.title}</h2>
             <p className="text-[var(--muted)] mb-2">{AEO_INTRO.body}</p>
             <p className="text-[var(--muted)] text-sm opacity-90">{AEO_INTRO.scoreMeaning}</p>
-            <p className="text-[var(--muted)] text-sm mt-2">
-              <Link href="/methodology" className="text-emerald-400 hover:text-emerald-300 underline">
-                How we score →
-              </Link>
-            </p>
           </div>
         </div>
       </header>
@@ -949,21 +932,13 @@ function HomeContent() {
           <p className="text-zinc-500 text-sm">
             {domainA.trim() ? (
               <>
-                Add an optional second domain to compare, or click <strong className="text-zinc-400">Scan</strong> to analyze one site. Each site is checked by fetching the homepage, IR paths, robots.txt, and sitemap, then analyzed for crawlability, structured data, parseability, freshness, and IR completeness.{" "}
-                <Link href="/methodology" className="text-emerald-400 hover:text-emerald-300 underline">
-                  How we score
-                </Link>
-                .
+                Add an optional second domain to compare, or click <strong className="text-zinc-400">Scan</strong> to analyze one site. Each site is checked by fetching the homepage, IR paths, robots.txt, and sitemap, then analyzed for crawlability, structured data, parseability, freshness, and IR completeness.
               </>
             ) : (
               <>
                 Enter at least one domain and click Scan, or two to Compare. Each site is checked by fetching the homepage,
                 IR paths (/investor, /ir), robots.txt, and sitemap (no deep crawl), then analyzed for
-                crawlability, structured data, parseability, freshness, and IR completeness.{" "}
-                <Link href="/methodology" className="text-emerald-400 hover:text-emerald-300 underline">
-                  How we score
-                </Link>
-                .
+                crawlability, structured data, parseability, freshness, and IR completeness.
               </>
             )}
           </p>
@@ -976,9 +951,6 @@ function HomeContent() {
           >
             Scoring methodology
           </Link>
-          <p className="text-zinc-500 text-sm mt-1">
-            How we calculate Overall readiness, AI Citation Readiness, category scores, and investor question coverage.
-          </p>
           <p className="text-zinc-500 text-sm mt-1">
             Scans are rate-limited; results may be cached.
           </p>
