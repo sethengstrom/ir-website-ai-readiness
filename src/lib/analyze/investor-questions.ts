@@ -7,6 +7,7 @@
 import * as cheerio from "cheerio";
 import type { CrawlPage } from "../crawler";
 import type { InvestorQuestionCoverage, InvestorQuestionResult, InvestorQuestionStatus } from "../types";
+import type { PageWithFacts } from "./json-ld-facts";
 
 const QUESTION_COUNT = 12;
 
@@ -114,7 +115,7 @@ function findSnippet(text: string, pattern: RegExp, maxLen = 120): string | unde
   return snip;
 }
 
-function sortPagesForQuestions(pages: CrawlPage[]): CrawlPage[] {
+function sortPagesForQuestions(pages: PageWithFacts[]): PageWithFacts[] {
   const score = (url: string): number => {
     const p = new URL(url).pathname.toLowerCase();
     if (/earnings|results|quarterly|financials/i.test(p)) return 4;
@@ -192,7 +193,7 @@ function tryEPSCombined(sorted: CrawlPage[]): InvestorQuestionResult | null {
 function testQuestion(
   id: string,
   question: string,
-  pages: CrawlPage[]
+  pages: PageWithFacts[]
 ): InvestorQuestionResult {
   const sorted = sortPagesForQuestions(pages);
   const pageType = (url: string) => getPageType(url);
@@ -202,6 +203,58 @@ function testQuestion(
     status: "not_answerable",
     explanation: "No relevant page or evidence found within request limits.",
   };
+
+  // Prefer JSON-LD when present (single source of truth for ticker, event dates, contact).
+  if (id === "stock_ticker") {
+    const pageWithTicker = sorted.find((p) => p.jsonLdFacts?.ticker);
+    if (pageWithTicker?.jsonLdFacts?.ticker) {
+      return {
+        id,
+        question,
+        status: "answerable",
+        explanation: "Stock ticker found in schema (Corporation.tickerSymbol).",
+        sourceUrl: pageWithTicker.url,
+        evidenceSnippet: pageWithTicker.jsonLdFacts.ticker,
+        pageType: getPageType(pageWithTicker.url),
+      };
+    }
+  }
+  if (id === "next_call") {
+    for (const p of sorted) {
+      const dates = p.jsonLdFacts?.eventDates;
+      if (dates?.length) {
+        const first = dates[0];
+        const snippet = first.name ? `${first.name}: ${first.startDate}` : first.startDate;
+        return {
+          id,
+          question,
+          status: "answerable",
+          explanation: "Event date found in schema (Event.startDate).",
+          sourceUrl: p.url,
+          evidenceSnippet: snippet,
+          pageType: getPageType(p.url),
+        };
+      }
+    }
+  }
+  if (id === "ir_contact") {
+    const pageWithContact = sorted.find(
+      (p) => p.jsonLdFacts?.contactPoint?.email || p.jsonLdFacts?.contactPoint?.url
+    );
+    if (pageWithContact?.jsonLdFacts?.contactPoint) {
+      const cp = pageWithContact.jsonLdFacts.contactPoint;
+      const snippet = cp.email ?? cp.url ?? "";
+      return {
+        id,
+        question,
+        status: "answerable",
+        explanation: "IR contact found in schema (Organization.contactPoint).",
+        sourceUrl: pageWithContact.url,
+        evidenceSnippet: snippet,
+        pageType: getPageType(pageWithContact.url),
+      };
+    }
+  }
 
   // Multi-page combination: revenue and EPS can use evidence from 2–3 pages.
   if (id === "revenue") {
@@ -287,6 +340,7 @@ function testQuestion(
         break;
       }
       case "stock_ticker": {
+        // JSON-LD already checked above; fall back to visible text.
         const hasTicker = STOCK_TICKER.test(text) || links.some((l) => /ticker|symbol|stock\s+quote/i.test(l.text + l.href));
         const snip = findSnippet(text, STOCK_TICKER);
         if (hasTicker) {
@@ -326,7 +380,7 @@ function testQuestion(
   return best;
 }
 
-export function analyzeInvestorQuestionCoverage(pages: CrawlPage[]): InvestorQuestionCoverage {
+export function analyzeInvestorQuestionCoverage(pages: PageWithFacts[]): InvestorQuestionCoverage {
   const questionResults: InvestorQuestionResult[] = INVESTOR_QUESTIONS.map(({ id, question }) =>
     testQuestion(id, question, pages)
   );

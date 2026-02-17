@@ -1,6 +1,6 @@
 import * as cheerio from "cheerio";
-import type { CrawlPage } from "../crawler";
 import type { Finding } from "../types";
+import type { PageWithFacts } from "./json-ld-facts";
 
 /**
  * Freshness: signals that help AI cite current, dated IR content.
@@ -168,7 +168,7 @@ function pageHasDate(html: string): boolean {
 
 const DATE_REGEX = /\b(20\d{2})[-/](0?[1-9]|1[0-2])[-/](0?[1-9]|[12]\d|3[01])\b|\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+20\d{2}\b/gi;
 
-export function analyzeFreshness(pages: CrawlPage[]): { score: number; findings: Finding[] } {
+export function analyzeFreshness(pages: PageWithFacts[]): { score: number; findings: Finding[] } {
   const findings: Finding[] = [];
   let score = 0;
 
@@ -200,14 +200,25 @@ export function analyzeFreshness(pages: CrawlPage[]): { score: number; findings:
 
   // 2) Earnings hub has date (25%) — visible or in JSON-LD so AI can cite "as of" and prefer current content.
   let earningsHubHasDate = false;
+  let earningsHubDateSnippet: string | undefined;
   if (earningsPages.length >= 1) {
-    earningsHubHasDate = pageHasDate(earningsPages[0].html);
+    const hub = earningsPages[0];
+    earningsHubHasDate = pageHasDate(hub.html);
+    if (earningsHubHasDate && hub.jsonLdFacts?.datePublished) {
+      earningsHubDateSnippet = `Schema datePublished: ${hub.jsonLdFacts.datePublished}`;
+    } else if (earningsHubHasDate && hub.jsonLdFacts?.dateModified) {
+      earningsHubDateSnippet = `Schema dateModified: ${hub.jsonLdFacts.dateModified}`;
+    }
     findings.push({
       category: "Freshness",
       subcategory: "Earnings hub",
       signal: earningsHubHasDate ? "Earnings hub page has date (visible or in schema)" : "Earnings hub page has no visible or schema date",
       score: earningsHubHasDate ? 100 : 0,
-      evidence: { url: earningsPages[0].url, method: earningsHubHasDate ? "html_parse" : "html_parse" },
+      evidence: {
+        url: hub.url,
+        snippet: earningsHubDateSnippet,
+        method: earningsHubDateSnippet ? "json_ld" : "html_parse",
+      },
       passed: earningsHubHasDate,
     });
   }

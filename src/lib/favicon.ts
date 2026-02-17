@@ -27,20 +27,37 @@ export function extractFaviconUrl(html: string, origin: string): string | null {
 
   let jsonLdLogo: string | null = null;
   try {
+    function flattenLdItems(data: unknown): unknown[] {
+      const items = Array.isArray(data) ? data : [data];
+      const out: unknown[] = [];
+      for (const item of items) {
+        if (!item || typeof item !== "object") continue;
+        const o = item as Record<string, unknown>;
+        if (Array.isArray(o["@graph"])) {
+          for (const g of o["@graph"]) {
+            if (g && typeof g === "object") out.push(g);
+          }
+        } else {
+          out.push(item);
+        }
+      }
+      return out;
+    }
     $('script[type="application/ld+json"]').each((_, el) => {
       if (jsonLdLogo) return;
       const text = $(el).html()?.trim();
       if (!text) return;
       try {
         const data = JSON.parse(text);
-        const items = Array.isArray(data) ? data : [data];
+        const items = flattenLdItems(data);
         for (const item of items) {
-          const type = item["@type"];
+          if (!item || typeof item !== "object") continue;
+          const type = (item as Record<string, unknown>)["@type"];
           const types = Array.isArray(type) ? type : type ? [type] : [];
-          if (types.some((t: string) => t === "Organization")) {
-            const logo = item.logo;
+          if (types.some((t: string) => t === "Organization" || t === "Corporation")) {
+            const logo = (item as Record<string, unknown>).logo;
             if (logo) {
-              const url = typeof logo === "string" ? logo : logo?.url ?? logo?.contentUrl;
+              const url = typeof logo === "string" ? logo : (logo as { url?: string; contentUrl?: string })?.url ?? (logo as { contentUrl?: string })?.contentUrl;
               if (url) {
                 jsonLdLogo = new URL(url, origin).href;
                 return;

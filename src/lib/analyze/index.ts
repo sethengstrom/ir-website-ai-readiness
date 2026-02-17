@@ -9,6 +9,7 @@ import { analyzeFreshness } from "./freshness";
 import { analyzeIRChecklist } from "./ir-checklist";
 import { analyzeResponseMetrics } from "./response-metrics";
 import { analyzeInvestorQuestionCoverage, getUnavailableInvestorCoverage } from "./investor-questions";
+import { extractJsonLdFacts } from "./json-ld-facts";
 
 const DEFAULT_CATEGORY_SCORE = 0;
 const EMPTY_FINDINGS: Finding[] = [];
@@ -37,6 +38,12 @@ function runAnalyzer<T>(name: string, fn: () => T, fallback: T): T {
 }
 
 export function analyzeDomain(result: CrawlResult): DomainResult {
+  // Pre-extract JSON-LD facts per page so investor-questions, structured-data, and freshness can use schema values.
+  const pagesWithFacts = result.pages.map((p) => ({
+    ...p,
+    jsonLdFacts: extractJsonLdFacts(p.html, p.url),
+  }));
+
   const crawlability = runAnalyzer(
     "crawlability",
     () => analyzeCrawlability(result),
@@ -44,7 +51,7 @@ export function analyzeDomain(result: CrawlResult): DomainResult {
   );
   const structuredData = runAnalyzer(
     "structuredData",
-    () => analyzeStructuredData(result.pages, result.origin),
+    () => analyzeStructuredData(pagesWithFacts, result.origin),
     { score: DEFAULT_CATEGORY_SCORE, findings: EMPTY_FINDINGS, breakdown: UNAVAILABLE_STRUCTURED_BREAKDOWN }
   );
   const parseability = runAnalyzer(
@@ -54,7 +61,7 @@ export function analyzeDomain(result: CrawlResult): DomainResult {
   );
   const freshness = runAnalyzer(
     "freshness",
-    () => analyzeFreshness(result.pages),
+    () => analyzeFreshness(pagesWithFacts),
     { score: DEFAULT_CATEGORY_SCORE, findings: EMPTY_FINDINGS }
   );
   const irChecklist = runAnalyzer(
@@ -87,7 +94,7 @@ export function analyzeDomain(result: CrawlResult): DomainResult {
 
   const investorQuestionCoverage = runAnalyzer(
     "investorQuestionCoverage",
-    () => analyzeInvestorQuestionCoverage(result.pages),
+    () => analyzeInvestorQuestionCoverage(pagesWithFacts),
     getUnavailableInvestorCoverage()
   );
 

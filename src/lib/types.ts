@@ -35,6 +35,17 @@ export interface CategoryScores {
   irChecklist: number;
 }
 
+/** IR-relevant values extracted from JSON-LD for use in investor questions and findings. */
+export interface JsonLdFacts {
+  ticker?: string;
+  orgName?: string;
+  /** Event start (and optionally end) dates plus name; for "next earnings call" etc. */
+  eventDates?: { startDate: string; endDate?: string; name?: string }[];
+  contactPoint?: { email?: string; url?: string; contactType?: string };
+  datePublished?: string;
+  dateModified?: string;
+}
+
 /** JSON-LD-only structured data readiness (0–100). Separate from overall category score which may include feeds. */
 export interface StructuredDataBreakdown {
   /** Score from JSON-LD analysis only: presence, valid parse, @context, @type, recommended types, field completeness. */

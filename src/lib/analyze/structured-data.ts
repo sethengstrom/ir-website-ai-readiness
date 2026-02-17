@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import type { CrawlPage } from "../crawler";
 import type { Finding, StructuredDataBreakdown } from "../types";
+import type { PageWithFacts } from "./json-ld-facts";
 
 /** IR-recommended schema types for structured data score. Organization/Corporation count as one slot. */
 const RECOMMENDED_IR_TYPES = [
@@ -165,11 +166,13 @@ function detectFeedUrls(html: string, baseOrigin: string): { href: string; type:
 const COMMON_FEED_PATHS = ["/feed", "/rss", "/atom", "/news/feed", "/press/feed", "/blog/feed"];
 
 export function analyzeStructuredData(
-  pages: CrawlPage[],
+  pages: PageWithFacts[],
   origin: string
 ): { score: number; findings: Finding[]; breakdown: StructuredDataBreakdown } {
   const findings: Finding[] = [];
   const seenTypes = new Set<string>();
+  const firstTickerFromFacts = pages.map((p) => p.jsonLdFacts?.ticker).find(Boolean) as string | undefined;
+  const firstOrgNameFromFacts = pages.map((p) => p.jsonLdFacts?.orgName).find(Boolean) as string | undefined;
   const allSchemaTypes: { type: string; url: string; snippet: string }[] = [];
   const feedUrls = new Set<string>();
   const fieldsPresent = new Set<string>();
@@ -259,7 +262,7 @@ export function analyzeStructuredData(
       score: 100,
       evidence: {
         url: allSchemaTypes.find((s) => s.type === "Organization" || s.type === "Corporation")?.url,
-        snippet: "Helps AI identify and cite your company",
+        snippet: firstOrgNameFromFacts ? `Organization: ${firstOrgNameFromFacts}` : "Helps AI identify and cite your company",
         method: "json_ld",
       },
       passed: true,
@@ -297,7 +300,7 @@ export function analyzeStructuredData(
       subcategory: "IR/LLM-friendly",
       signal: "Corporation ticker symbol in schema",
       score: 100,
-      evidence: { snippet: "Investor-oriented identifier for AI", method: "json_ld" },
+      evidence: { snippet: firstTickerFromFacts ? `Ticker in schema: ${firstTickerFromFacts}` : "Investor-oriented identifier for AI", method: "json_ld" },
       passed: true,
     });
   }
