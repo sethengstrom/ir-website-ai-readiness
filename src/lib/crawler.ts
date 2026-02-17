@@ -1,9 +1,14 @@
 /**
- * Two-phase fetcher aligned with common IR site patterns:
- * Phase 1: homepage, robots.txt, sitemap.xml, and one IR URL—either the user-provided path (e.g. /overview/default.aspx),
- * or /investors for IR subdomains (investor.*, ir.*, investors.*), else /investor. If sitemap.xml isn't at root, we try
- * the first Sitemap: URL from robots.txt. Phase 2: up to 2 earnings/events/presentations links from phase-1 HTML.
- * Max 6–7 requests per domain (7 when sitemap fallback is used), 12s timeout each.
+ * Two-phase fetcher aligned with common IR site patterns.
+ * Phase 1a: homepage, robots.txt, sitemap.xml (3 requests). We then discover the IR entry URL from the site itself:
+ * - User-provided path (if they pasted a full URL), or
+ * - IR-looking links in the homepage's server-rendered nav (text, href, title, aria-label), or
+ * - IR URLs from the sitemap (when available), or
+ * - Conventional guess (/investors for IR subdomains, else /investor).
+ * Phase 1b: fetch the chosen IR URL (and if it fails, one fallback path). If sitemap wasn't at root, we try the first
+ * Sitemap: from robots so discovery can use sitemap IR URLs when possible.
+ * Phase 2: up to 2 earnings/events/presentations links from phase-1 HTML.
+ * Max 6–7 requests per domain, 12s timeout each. Robustness and accuracy over speed.
  */
 
 import * as cheerio from "cheerio";
@@ -11,9 +16,116 @@ import { getOrigin, isLikelyIRPath } from "./url-utils";
 import type { RobotsResult } from "./robots";
 import type { SitemapResult } from "./sitemap";
 
+/** Link text/aria/label phrases that strongly indicate an IR section (for ranking nav-discovered links). */
+const IR_NAV_PHRASES = [
+  "investor relations",
+  "investor relation",
+  "for investors",
+  "investors",
+  " ir ",
+  "ir/",
+  "/ir",
+  "shareholders",
+  "shareholder",
+  "financial information",
+  "stock information",
+];
+
+/** Paths that look like the main IR landing (prefer when multiple candidates). */
+function pathLooksCanonicalIR(pathname: string): boolean {
+  const p = pathname.toLowerCase().replace(/\/$/, "") || "/";
+  return (
+    p === "/investor" ||
+    p === "/investors" ||
+    p === "/investor-relations" ||
+    p === "/ir" ||
+    p === "/"
+  );
+}
+
+/**
+ * Extract same-origin links from HTML that look like IR section links. Uses link text, href, title, and aria-label.
+ * Returns absolute URLs ranked by relevance (canonical path > IR phrasing in text > path matches IR keywords).
+ */
+function extractIRLinksFromHtml(html: string, baseOrigin: string): string[] {
+  const $ = cheerio.load(html);
+  const seen = new Set<string>();
+  const scored: { url: string; score: number; pathLen: number }[] = [];
+  const base = baseOrigin.replace(/\/$/, "");
+
+  $("a[href]").each((_, el) => {
+    const href = $(el).attr("href")?.trim();
+    if (!href || href.startsWith("#") || href.startsWith("javascript:")) return;
+    const text = ($(el).text() || "").replace(/\s+/g, " ").trim().toLowerCase();
+    const title = (($(el).attr("title") || "").replace(/\s+/g, " ").trim()).toLowerCase();
+    const ariaLabel = (($(el).attr("aria-label") || "").replace(/\s+/g, " ").trim()).toLowerCase();
+    const combined = `${text} ${title} ${ariaLabel} ${href}`.toLowerCase();
+
+    try {
+      const url = new URL(href, baseOrigin);
+      if (url.origin !== base) return;
+      url.hash = "";
+      const pathname = url.pathname.replace(/\/+/g, "/").replace(/\/$/, "") || "/";
+      const full = url.href;
+      if (seen.has(full)) return;
+
+      const hasIRPhrase = IR_NAV_PHRASES.some((phrase) =>
+        combined.includes(phrase) || pathname.includes(phrase.trim())
+      );
+      if (!hasIRPhrase && !isLikelyIRPath(pathname)) return;
+
+      seen.add(full);
+      let score = 0;
+      if (pathLooksCanonicalIR(pathname)) score += 3;
+      if (/investor\s*relations?|for\s*investors|\binvestors\b|\bir\b|shareholder|financial\s*info/i.test(combined)) score += 2;
+      if (isLikelyIRPath(pathname)) score += 1;
+      const pathLen = pathname.split("/").filter(Boolean).length;
+      scored.push({ url: full, score, pathLen });
+    } catch {
+      // skip invalid URL
+    }
+  });
+
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (a.pathLen !== b.pathLen) return a.pathLen - b.pathLen;
+    return a.url.localeCompare(b.url);
+  });
+  return scored.map((s) => s.url);
+}
+
+/**
+ * Pick the best IR URL from sitemap's irUrls: prefer canonical landing paths, then shorter paths.
+ */
+function pickBestSitemapIRUrl(irUrls: string[], origin: string): string | null {
+  if (irUrls.length === 0) return null;
+  const base = origin.replace(/\/$/, "");
+  const scored: { url: string; canonical: number; pathLen: number }[] = [];
+  for (const raw of irUrls) {
+    try {
+      const url = new URL(raw);
+      if (url.origin !== base) continue;
+      const pathname = url.pathname.replace(/\/+/g, "/").replace(/\/$/, "") || "/";
+      const canonical = pathLooksCanonicalIR(pathname) ? 1 : 0;
+      const pathLen = pathname.split("/").filter(Boolean).length;
+      scored.push({ url: url.href, canonical, pathLen });
+    } catch {
+      // skip
+    }
+  }
+  if (scored.length === 0) return null;
+  scored.sort((a, b) => {
+    if (b.canonical !== a.canonical) return b.canonical - a.canonical;
+    if (a.pathLen !== b.pathLen) return a.pathLen - b.pathLen;
+    return a.url.localeCompare(b.url);
+  });
+  return scored[0].url;
+}
+
 /** Per-request timeout; slow IR sites may need 12s to respond. */
 const FETCH_TIMEOUT_MS = 12000;
-const MAX_PHASE1 = 4;
+/** Phase 1a: home, robots, sitemap only. IR URL is chosen by discovery then fetched separately. */
+const PHASE1A_COUNT = 3;
 const MAX_FOLLOWUP = 2;
 /** Browser-like UA so IR sites (e.g. Ciena) don't block or throttle server requests. */
 const USER_AGENT =
@@ -286,22 +398,12 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
     }
   })();
 
-  // Fourth HTML URL: user-provided path (e.g. /overview/default.aspx) or conventional IR path.
-  // IR subdomains (investor.X, ir.X, investors.X) often use /investors for a subsection; main domains often use /investor or /investors.
-  const fourthHtmlUrl =
-    userPath !== null
-      ? `${base}${userPath}`
-      : isIRSubdomain(hostname)
-        ? `${base}/investors`
-        : `${base}/investor`;
-
   try {
-  const phase1Urls: { url: string; acceptHtmlOnly: boolean }[] = [
+  const phase1aUrls: { url: string; acceptHtmlOnly: boolean }[] = [
     { url: `${base}/`, acceptHtmlOnly: true },
     { url: `${base}/robots.txt`, acceptHtmlOnly: false },
     { url: `${base}/sitemap.xml`, acceptHtmlOnly: false },
-    { url: fourthHtmlUrl, acceptHtmlOnly: true },
-  ].slice(0, MAX_PHASE1);
+  ].slice(0, PHASE1A_COUNT);
 
   const robots: RobotsResult = {
     reachable: false,
@@ -327,22 +429,21 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
   const irUrlsFromCrawl: string[] = [];
   const htmlByUrl = new Map<string, string>();
 
-  const phase1Settled = await Promise.allSettled(
-    phase1Urls.map(({ url, acceptHtmlOnly }) =>
+  const phase1aSettled = await Promise.allSettled(
+    phase1aUrls.map(({ url, acceptHtmlOnly }) =>
       fetchOne(url, acceptHtmlOnly).then((r) => ({ url, acceptHtmlOnly, ...r }))
     )
   );
-  const phase1Results = phase1Settled.map((p) =>
+  const phase1aResults = phase1aSettled.map((p) =>
     p.status === "fulfilled" ? p.value : { url: "", acceptHtmlOnly: false, status: 0, contentType: "", body: "", responseTimeMs: 0, lastModified: null }
   );
-  // Reattach url/acceptHtmlOnly for entries that failed so we can skip them
-  phase1Urls.forEach((u, i) => {
-    if (phase1Settled[i].status === "fulfilled") return;
-    (phase1Results[i] as { url: string; acceptHtmlOnly: boolean }).url = u.url;
-    (phase1Results[i] as { url: string; acceptHtmlOnly: boolean }).acceptHtmlOnly = u.acceptHtmlOnly;
+  phase1aUrls.forEach((u, i) => {
+    if (phase1aSettled[i].status === "fulfilled") return;
+    (phase1aResults[i] as { url: string; acceptHtmlOnly: boolean }).url = u.url;
+    (phase1aResults[i] as { url: string; acceptHtmlOnly: boolean }).acceptHtmlOnly = u.acceptHtmlOnly;
   });
 
-  for (const { url, acceptHtmlOnly, status, contentType, body, responseTimeMs, lastModified } of phase1Results) {
+  for (const { url, acceptHtmlOnly, status, contentType, body, responseTimeMs, lastModified } of phase1aResults) {
     if (!url) continue;
     if (url.endsWith("/robots.txt")) {
       if (status === 200 && body) {
@@ -392,7 +493,77 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
     }
   }
 
-  // If the 4th URL (IR page) failed (404 or non-HTML), try one fallback path so we don't miss the IR landing.
+  // If sitemap wasn't at root, try first Sitemap: from robots so we have irUrls for discovery.
+  if (!sitemap.reachable && robots.sitemapUrls.length > 0) {
+    const firstSitemapUrl = robots.sitemapUrls[0];
+    try {
+      const sitemapRes = await fetchOne(firstSitemapUrl, false);
+      if (sitemapRes.status === 200 && sitemapRes.body && /<\?xml|<\/urlset|<\/sitemapindex/i.test(sitemapRes.body)) {
+        const parsed = parseSitemapXmlOnly(sitemapRes.body, origin);
+        sitemap = {
+          reachable: true,
+          urlCount: parsed.urlCount,
+          irUrlCount: parsed.irUrlCount,
+          urls: parsed.urls,
+          irUrls: parsed.irUrls,
+          childSitemaps: [],
+        };
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Discover IR entry URL: user path > homepage nav links > sitemap IR URLs > conventional guess.
+  const homeUrl = `${base}/`;
+  const homeHtml = htmlByUrl.get(homeUrl);
+  let fourthHtmlUrl: string;
+  if (userPath !== null) {
+    fourthHtmlUrl = `${base}${userPath}`;
+  } else {
+    const fromNav = homeHtml ? extractIRLinksFromHtml(homeHtml, base) : [];
+    const navFirst = fromNav[0];
+    const sitemapFirst = pickBestSitemapIRUrl(sitemap.irUrls, base);
+    if (navFirst) {
+      fourthHtmlUrl = navFirst;
+    } else if (sitemapFirst) {
+      fourthHtmlUrl = sitemapFirst;
+    } else {
+      fourthHtmlUrl = isIRSubdomain(hostname) ? `${base}/investors` : `${base}/investor`;
+    }
+  }
+
+  // Fetch the chosen IR URL if we don't already have it (e.g. nav pointed to / and we have homepage).
+  if (!htmlByUrl.has(fourthHtmlUrl)) {
+    try {
+      const irRes = await fetchOne(fourthHtmlUrl, true);
+      if (
+        irRes.status === 200 &&
+        irRes.body &&
+        (irRes.contentType.includes("text/html") || irRes.contentType.includes("application/xhtml"))
+      ) {
+        htmlByUrl.set(fourthHtmlUrl, irRes.body);
+        pages.push({
+          url: fourthHtmlUrl,
+          html: irRes.body,
+          status: irRes.status,
+          contentType: irRes.contentType,
+          responseTimeMs: irRes.responseTimeMs,
+          lastModified: irRes.lastModified ?? undefined,
+        });
+        urlsFromCrawl.push(fourthHtmlUrl);
+        try {
+          if (isLikelyIRPath(new URL(fourthHtmlUrl).pathname)) irUrlsFromCrawl.push(fourthHtmlUrl);
+        } catch {
+          // ignore
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // If the IR URL failed (404 or non-HTML) and we didn't use a user path, try one fallback path.
   if (!htmlByUrl.has(fourthHtmlUrl) && userPath === null) {
     const fallbackPath =
       fourthHtmlUrl.endsWith("/investors") || fourthHtmlUrl.endsWith("/investors/")
@@ -427,27 +598,6 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
       } catch {
         // ignore
       }
-    }
-  }
-
-  // If sitemap.xml wasn't at the default path, try first sitemap URL from robots.txt (common on IR sites).
-  if (!sitemap.reachable && robots.sitemapUrls.length > 0) {
-    const firstSitemapUrl = robots.sitemapUrls[0];
-    try {
-      const sitemapRes = await fetchOne(firstSitemapUrl, false);
-      if (sitemapRes.status === 200 && sitemapRes.body && /<\?xml|<\/urlset|<\/sitemapindex/i.test(sitemapRes.body)) {
-        const parsed = parseSitemapXmlOnly(sitemapRes.body, origin);
-        sitemap = {
-          reachable: true,
-          urlCount: parsed.urlCount,
-          irUrlCount: parsed.irUrlCount,
-          urls: parsed.urls,
-          irUrls: parsed.irUrls,
-          childSitemaps: [],
-        };
-      }
-    } catch {
-      // ignore
     }
   }
 

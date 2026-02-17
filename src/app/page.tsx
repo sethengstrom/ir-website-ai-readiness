@@ -13,6 +13,7 @@ import type {
 import { AEO_INTRO, CATEGORY_CONTEXT, getFindingWhyItMatters, getCategoryFindingsForDomain } from "@/lib/aeo-context";
 import { messageForCode, isScanErrorCode, SCAN_ERROR_CODES } from "@/lib/scan-errors";
 import { downloadResultsPdf } from "@/lib/download-report-pdf";
+import { APP_VERSION } from "@/lib/version";
 
 type ScanProgressEvent = { phase: string; message: string; progress: number };
 
@@ -945,12 +946,21 @@ function HomeContent() {
         )}
 
         <footer className="mt-10 pt-6 border-t border-[var(--card-border)]">
-          <Link
-            href="/methodology"
-            className="text-sm text-emerald-400 hover:text-emerald-300 underline focus:outline-none focus:ring-2 focus:ring-emerald-500/50 rounded"
-          >
-            Scoring methodology
-          </Link>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <Link
+              href="/methodology"
+              className="text-sm text-emerald-400 hover:text-emerald-300 underline focus:outline-none focus:ring-2 focus:ring-emerald-500/50 rounded"
+            >
+              Scoring methodology
+            </Link>
+            <Link
+              href="/changelog"
+              className="text-sm text-[var(--muted)] hover:text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50 rounded"
+              title="Changelog"
+            >
+              v{APP_VERSION}
+            </Link>
+          </div>
           <p className="text-zinc-500 text-sm mt-1">
             Scans are rate-limited; results may be cached.
           </p>

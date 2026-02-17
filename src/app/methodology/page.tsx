@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { APP_VERSION } from "@/lib/version";
 
 export const metadata = {
   title: "Scoring methodology | IR AI Readiness Scanner",
@@ -82,11 +83,12 @@ export default function MethodologyPage() {
             Per domain we do a two-phase fetch (max 6–7 requests, 12s timeout each) to match how IR sites are structured:
           </p>
           <ul className="list-disc list-inside text-[var(--muted)] text-base space-y-1 ml-2">
-            <li><strong className="text-[var(--foreground)]">Phase 1:</strong> Homepage, robots.txt, sitemap.xml (or the first Sitemap: URL from robots.txt if sitemap.xml isn’t at the root), and one IR page—the path you entered if you pasted a full URL (e.g. /overview/default.aspx), or /investors for IR subdomains (investor.*, ir.*, investors.*), otherwise /investor.</li>
+            <li><strong className="text-[var(--foreground)]">Phase 1a (3 requests):</strong> Homepage, robots.txt, sitemap.xml If not at root, we try the first Sitemap: from robots.txt.</li>
+            <li><strong className="text-[var(--foreground)]">IR page discovery:</strong> We choose the IR URL from the site when you do not paste a full URL: first from homepage nav links (text, href, title, aria-label), then from IR URLs in the sitemap, then conventional /investors or /investor. We fetch that URL and one fallback if it fails.</li>
             <li><strong className="text-[var(--foreground)]">Phase 2 (up to 2 requests):</strong> From phase 1 HTML we collect same-origin links whose URL or anchor matches earnings-related terms (earnings, results, quarterly, q1–q4, webcast, replay, transcript, press-release, financials, events, presentations, etc.). We rank them and fetch up to 2 additional pages.</li>
           </ul>
           <p className="text-[var(--muted)] text-base leading-relaxed mt-3">
-            Only HTML from successful responses is used for analysis. No sitemap traversal or recursive crawl.
+            Only HTML from successful responses is used for analysis. No sitemap traversal or recursive crawl. Discovery from nav and sitemap improves accuracy for sites that use non-standard IR paths.
           </p>
         </section>
 
@@ -121,9 +123,12 @@ export default function MethodologyPage() {
           </p>
         </section>
 
-        <p className="pt-4 border-t border-[var(--card-border)]">
+        <p className="pt-4 border-t border-[var(--card-border)] flex flex-wrap items-center gap-x-4 gap-y-1">
           <Link href="/" className="text-[var(--accent)] hover:opacity-90 text-sm">
             ← Back to scanner
+          </Link>
+          <Link href="/changelog" className="text-[var(--muted)] hover:text-[var(--foreground)] text-sm" title="Changelog">
+            v{APP_VERSION}
           </Link>
         </p>
       </main>
