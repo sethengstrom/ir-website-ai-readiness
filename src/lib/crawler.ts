@@ -405,8 +405,11 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
 
   const alreadyFetched = new Set(pages.map((p) => p.url));
   const followCandidates: string[] = [];
-  for (const [, html] of htmlByUrl) {
-    followCandidates.push(...extractEarningsCandidates(html, base));
+  // Iterate phase-1 HTML in stable URL order so phase-2 link selection is deterministic for the same content.
+  const phase1HtmlUrls = [...htmlByUrl.keys()].sort((a, b) => a.localeCompare(b));
+  for (const url of phase1HtmlUrls) {
+    const html = htmlByUrl.get(url);
+    if (html) followCandidates.push(...extractEarningsCandidates(html, base));
   }
   const followUrls = [...new Set(followCandidates)]
     .filter((u) => !alreadyFetched.has(u))

@@ -41,7 +41,7 @@ const EARNINGS_TERMS = [
   "investor",
 ];
 
-const EARNINGS_HUB_THRESHOLD = 4;
+const EARNINGS_HUB_THRESHOLD = 3;
 
 /**
  * Scores how strongly a page looks like an earnings/results hub by combining:
@@ -94,6 +94,12 @@ function pageMatchesEarningsHub(url: string, html: string): boolean {
   score += Math.min(bodyScore, bodyCap);
 
   return score >= EARNINGS_HUB_THRESHOLD;
+}
+
+/** Path looks like the main IR landing (investor, investors, ir) — used to prefer a stable "hub" and for partial credit. */
+function pathIsCanonicalIR(pathname: string): boolean {
+  const p = pathname.toLowerCase();
+  return p.includes("/investor") || p.includes("/investors") || p === "/ir" || p.includes("/ir/");
 }
 
 /** True if body text contains a visible date (YYYY-MM-DD or "Jan 15, 2025" style). */
@@ -173,10 +179,21 @@ export function analyzeFreshness(pages: PageWithFacts[]): { score: number; findi
   let score = 0;
 
   const sortedPages = [...pages].sort((a, b) => a.url.localeCompare(b.url));
-  const earningsPages = sortedPages.filter((p) => pageMatchesEarningsHub(p.url, p.html));
+  let earningsPages = sortedPages.filter((p) => pageMatchesEarningsHub(p.url, p.html));
+  // Prefer the canonical IR page (path with /investor, /investors, /ir) when multiple match, so "the" hub is stable across runs.
+  if (earningsPages.length > 1) {
+    earningsPages = [...earningsPages].sort((a, b) => {
+      const aCanon = pathIsCanonicalIR(new URL(a.url).pathname) ? 1 : 0;
+      const bCanon = pathIsCanonicalIR(new URL(b.url).pathname) ? 1 : 0;
+      if (bCanon !== aCanon) return bCanon - aCanon;
+      return a.url.localeCompare(b.url);
+    });
+  }
 
-  // 1) Earnings hub exists (35%) — AI needs to find the right page for earnings answers.
-  const earningsScore = earningsPages.length >= 1 ? 100 : 0;
+  const hasCanonicalIRPage = sortedPages.some((p) => pathIsCanonicalIR(new URL(p.url).pathname));
+  // 1) Earnings hub exists (35%) — full score if hub detected; partial (50) if we have IR landing but no hub match (reduces 0/100 flip).
+  const earningsScore =
+    earningsPages.length >= 1 ? 100 : hasCanonicalIRPage ? 50 : 0;
   if (earningsPages.length >= 1) {
     findings.push({
       category: "Freshness",
@@ -185,6 +202,15 @@ export function analyzeFreshness(pages: PageWithFacts[]): { score: number; findi
       score: 100,
       evidence: { url: earningsPages[0].url, snippet: "earnings/results/webcast keywords", method: "heuristic" },
       passed: true,
+    });
+  } else if (hasCanonicalIRPage) {
+    findings.push({
+      category: "Freshness",
+      subcategory: "Earnings hub",
+      signal: "IR landing page present; earnings hub heuristic not met",
+      score: 50,
+      evidence: { snippet: "Add earnings/results/quarter keywords to title or body for full credit", method: "heuristic" },
+      passed: false,
     });
   } else {
     findings.push({
@@ -224,7 +250,7 @@ export function analyzeFreshness(pages: PageWithFacts[]): { score: number; findi
   }
   score += (earningsHubHasDate ? 100 : 0) * 0.25;
 
-  // 3) Other pages with dates (25%) — proportion of crawled pages that show dates (visible or in JSON-LD).
+  // 3) Other pages with dates (25%) — tiered (0 / 50 / 100) so small changes in which pages we got don't swing the score.
   let pagesWithDates = 0;
   let archiveFound = false;
   for (const page of sortedPages) {
@@ -234,7 +260,8 @@ export function analyzeFreshness(pages: PageWithFacts[]): { score: number; findi
       archiveFound = true;
   }
   const n = Math.max(1, sortedPages.length);
-  const dateScore = Math.round((pagesWithDates / n) * 100);
+  const dateScore =
+    pagesWithDates === 0 ? 0 : pagesWithDates >= 3 || pagesWithDates >= n / 2 ? 100 : 50;
   findings.push({
     category: "Freshness",
     subcategory: "Dates",
