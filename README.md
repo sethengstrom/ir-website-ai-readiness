@@ -12,7 +12,7 @@ Next.js App Router MVP that compares two domains for **investor relations (IR) A
 
 | Category | Signals |
 |----------|--------|
-| **Crawlability** | robots.txt reachable; whether it disallows `/investors` or `/investor-relations`; sitemap.xml reachable; sitemap index + child sitemaps; count of IR-related URLs in sitemap and crawl |
+| **Crawlability** | robots.txt reachable; whether it disallows `/investors`, `/investor-relations`, `/investor`, or `/ir`; sitemap reachable; count of IR-related URLs in sitemap and crawl |
 | **Structured data** | JSON-LD blocks and schema types (FAQPage, QAPage, NewsArticle, PressRelease, Event, Organization); RSS/Atom feeds (link tags) |
 | **Parseability** | Server-rendered text length; ratio of boilerplate to main content; H1/H2 headings; canonical tags |
 | **Freshness** | “Latest earnings” hub (earnings, results, quarter, webcast, transcript); dates on press/events; archive pages |
@@ -77,9 +77,9 @@ No code changes are required beyond the schema provider and env.
 
 This is a **lightweight, deterministic** scanner suitable for Vercel serverless and sales demos. It does **not** perform deep crawling or sitemap traversal.
 
-- **Per domain:** Up to **5 requests** only: homepage, `/robots.txt`, `/sitemap.xml`, `/investor`, `/ir`. No recursive links, no queue, no depth.
-- **Timeout:** **8 seconds** per request (AbortController). Total scan typically completes in under 30s.
-- **Robots.txt:** Fetched and parsed; disallow for `/investors` and `/investor-relations` is checked.
+- **Per domain:** Two-phase fetch, **max 6–7 requests**: Phase 1 — homepage, `/robots.txt`, `/sitemap.xml`, and **one** IR page (user path if you paste a full URL; else `/investors` for IR subdomains, else `/investor`). If that IR page returns 404/non-HTML, we try **one** fallback path (`/investors`→`/investor` or `/investor`→`/investor-relations`). If `/sitemap.xml` isn’t at root, we try the first `Sitemap:` URL from robots. Phase 2 — up to **2** earnings/events/presentations links extracted from phase-1 HTML. No recursive crawl.
+- **Timeout:** **12 seconds** per request. Total scan typically completes within the API timeout (60s).
+- **Robots.txt:** Fetched and parsed; disallow for `/investors`, `/investor-relations`, `/investor`, and `/ir` is checked (crawlability score reflects all four).
 - **Sitemap.xml:** Fetched and parsed only to count `<loc>` URLs in that single file; **URLs inside are not crawled**.
 - **Analysis:** JSON-LD blocks, `<title>`, canonical, meta description, Organization/Corporation schema, HTTP status, response time, Last-Modified. Same output shape (scores + findings) so the UI is unchanged.
 
