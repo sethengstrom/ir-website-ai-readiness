@@ -1,10 +1,13 @@
 /**
- * Two-phase fetcher: Phase 1 = homepage, robots, sitemap, /investor (4). Phase 2 = up to 2 earnings-related links.
- * Max 6 requests per domain, 12s timeout each. Uses Promise.allSettled so one slow/failing request doesn't abort the crawl.
+ * Two-phase fetcher aligned with common IR site patterns:
+ * Phase 1: homepage, robots.txt, sitemap.xml, and one IR URL—either the user-provided path (e.g. /overview/default.aspx),
+ * or /investors for IR subdomains (investor.*, ir.*, investors.*), else /investor. If sitemap.xml isn't at root, we try
+ * the first Sitemap: URL from robots.txt. Phase 2: up to 2 earnings/events/presentations links from phase-1 HTML.
+ * Max 6–7 requests per domain (7 when sitemap fallback is used), 12s timeout each.
  */
 
 import * as cheerio from "cheerio";
-import { getOrigin } from "./url-utils";
+import { getOrigin, isLikelyIRPath } from "./url-utils";
 import type { RobotsResult } from "./robots";
 import type { SitemapResult } from "./sitemap";
 
@@ -49,8 +52,8 @@ async function readTextWithLimit(res: Response, maxBytes: number): Promise<strin
   return new TextDecoder().decode(buf);
 }
 
-/** Match anchors/URLs for earnings-related targets (deterministic). */
-const EARNINGS_LINK_PATTERN = /earnings|results|quarterly|q1|q2|q3|q4|fy\d|press-release|release|webcast|replay|transcript|prepared-remarks|financials|quarter/i;
+/** Match anchors/URLs for earnings-related targets (deterministic). Include events and presentations (common on IR sites). */
+const EARNINGS_LINK_PATTERN = /earnings|results|quarterly|q1|q2|q3|q4|fy\d|press-release|release|webcast|replay|transcript|prepared-remarks|financials|quarter|events|presentations/i;
 
 export interface CrawlPage {
   url: string;
@@ -113,7 +116,6 @@ function parseRobotsText(text: string): Omit<RobotsResult, "reachable" | "rawCon
 function parseSitemapXmlOnly(xml: string, origin: string): { urlCount: number; irUrlCount: number; urls: string[]; irUrls: string[] } {
   const urls: string[] = [];
   const irUrls: string[] = [];
-  const irKeywords = ["investor", "ir", "shareholder", "financial", "sec", "news", "press", "event", "governance", "esg"];
   try {
     const $ = cheerio.load(xml, { xmlMode: true });
     $("url loc").each((_, el) => {
@@ -123,8 +125,7 @@ function parseSitemapXmlOnly(xml: string, origin: string): { urlCount: number; i
         const u = new URL(loc);
         if (u.origin !== origin) return;
         urls.push(loc);
-        const path = u.pathname.toLowerCase();
-        if (irKeywords.some((k) => path.includes(k))) irUrls.push(loc);
+        if (isLikelyIRPath(u.pathname)) irUrls.push(loc);
       } catch {
         // skip
       }
@@ -133,16 +134,6 @@ function parseSitemapXmlOnly(xml: string, origin: string): { urlCount: number; i
     // ignore
   }
   return { urlCount: urls.length, irUrlCount: irUrls.length, urls, irUrls };
-}
-
-function isIrPath(pathname: string): boolean {
-  const lower = pathname.toLowerCase();
-  return (
-    lower.includes("investor") ||
-    lower.includes("/ir") ||
-    lower === "/ir" ||
-    lower.includes("investor-relations")
-  );
 }
 
 /** Extract earnings-related links from HTML; return absolute URLs same-origin, ranked by relevance (deterministic). */
@@ -164,8 +155,8 @@ function extractEarningsCandidates(html: string, baseOrigin: string): string[] {
       seen.add(full);
       let score = 0;
       if (/earnings|quarterly|results|q[1-4]|financials/i.test(combined)) score += 3;
-      if (/webcast|replay|transcript|press-release|release/i.test(combined)) score += 2;
-      if (/\.pdf|presentation|slide/i.test(combined)) score += 1;
+      if (/webcast|replay|transcript|press-release|release|events/i.test(combined)) score += 2;
+      if (/\.pdf|presentation|slide|presentations/i.test(combined)) score += 1;
       scored.push({ url: full, score });
     } catch {
       // skip invalid URL
@@ -257,23 +248,53 @@ function emptyCrawlResult(origin: string): CrawlResult {
   };
 }
 
+/** True if the hostname looks like an IR subdomain (investor., ir., investors.). */
+function isIRSubdomain(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return h.startsWith("investor.") || h.startsWith("ir.") || h.startsWith("investors.");
+}
+
 export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
   let origin: string;
+  let userPath: string | null = null;
   if (domainInput.startsWith("http")) {
     const o = getOrigin(domainInput);
     if (!o) throw new Error("Invalid domain URL");
     origin = o;
+    try {
+      const parsed = new URL(domainInput);
+      const p = parsed.pathname.replace(/\/+/g, "/").trim();
+      if (p && p !== "/") userPath = p.startsWith("/") ? p : `/${p}`;
+    } catch {
+      // ignore
+    }
   } else {
     origin = `https://${domainInput.replace(/^\/+/, "").split("/")[0]}`;
   }
   const base = origin.replace(/\/$/, "");
+  const hostname = (() => {
+    try {
+      return new URL(origin).hostname;
+    } catch {
+      return "";
+    }
+  })();
+
+  // Fourth HTML URL: user-provided path (e.g. /overview/default.aspx) or conventional IR path.
+  // IR subdomains (investor.X, ir.X, investors.X) often use /investors for a subsection; main domains often use /investor or /investors.
+  const fourthHtmlUrl =
+    userPath !== null
+      ? `${base}${userPath}`
+      : isIRSubdomain(hostname)
+        ? `${base}/investors`
+        : `${base}/investor`;
 
   try {
   const phase1Urls: { url: string; acceptHtmlOnly: boolean }[] = [
     { url: `${base}/`, acceptHtmlOnly: true },
     { url: `${base}/robots.txt`, acceptHtmlOnly: false },
     { url: `${base}/sitemap.xml`, acceptHtmlOnly: false },
-    { url: `${base}/investor`, acceptHtmlOnly: true },
+    { url: fourthHtmlUrl, acceptHtmlOnly: true },
   ].slice(0, MAX_PHASE1);
 
   const robots: RobotsResult = {
@@ -354,10 +375,31 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
       });
       urlsFromCrawl.push(url);
       try {
-        if (isIrPath(new URL(url).pathname)) irUrlsFromCrawl.push(url);
+        if (isLikelyIRPath(new URL(url).pathname)) irUrlsFromCrawl.push(url);
       } catch {
         // ignore
       }
+    }
+  }
+
+  // If sitemap.xml wasn't at the default path, try first sitemap URL from robots.txt (common on IR sites).
+  if (!sitemap.reachable && robots.sitemapUrls.length > 0) {
+    const firstSitemapUrl = robots.sitemapUrls[0];
+    try {
+      const sitemapRes = await fetchOne(firstSitemapUrl, false);
+      if (sitemapRes.status === 200 && sitemapRes.body && /<\?xml|<\/urlset|<\/sitemapindex/i.test(sitemapRes.body)) {
+        const parsed = parseSitemapXmlOnly(sitemapRes.body, origin);
+        sitemap = {
+          reachable: true,
+          urlCount: parsed.urlCount,
+          irUrlCount: parsed.irUrlCount,
+          urls: parsed.urls,
+          irUrls: parsed.irUrls,
+          childSitemaps: [],
+        };
+      }
+    } catch {
+      // ignore
     }
   }
 
@@ -390,7 +432,7 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
         });
         urlsFromCrawl.push(url);
         try {
-          if (isIrPath(new URL(url).pathname)) irUrlsFromCrawl.push(url);
+          if (isLikelyIRPath(new URL(url).pathname)) irUrlsFromCrawl.push(url);
         } catch {
           // ignore
         }

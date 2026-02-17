@@ -84,11 +84,11 @@ export default function MethodologyPage() {
         <section>
           <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Crawl process</h2>
           <p className="text-[var(--muted)] text-base leading-relaxed mb-3">
-            Per domain we do a two-phase fetch (max 6 requests total, 12s timeout each) to balance speed with reliability:
+            Per domain we do a two-phase fetch (max 6–7 requests, 12s timeout each) to match how IR sites are structured:
           </p>
           <ul className="list-disc list-inside text-[var(--muted)] text-base space-y-1 ml-2">
-            <li><strong className="text-[var(--foreground)]">Phase 1 (4 requests):</strong> Homepage, robots.txt, sitemap.xml, /investor.</li>
-            <li><strong className="text-[var(--foreground)]">Phase 2 (up to 2 requests):</strong> From phase 1 HTML we collect same-origin links whose URL or anchor matches earnings-related terms (earnings, results, quarterly, q1–q4, webcast, replay, transcript, press-release, financials, etc.). We rank them deterministically and fetch up to 2 additional pages to improve earnings-question coverage.</li>
+            <li><strong className="text-[var(--foreground)]">Phase 1:</strong> Homepage, robots.txt, sitemap.xml (or the first Sitemap: URL from robots.txt if sitemap.xml isn’t at the root), and one IR page—the path you entered if you pasted a full URL (e.g. /overview/default.aspx), or /investors for IR subdomains (investor.*, ir.*, investors.*), otherwise /investor.</li>
+            <li><strong className="text-[var(--foreground)]">Phase 2 (up to 2 requests):</strong> From phase 1 HTML we collect same-origin links whose URL or anchor matches earnings-related terms (earnings, results, quarterly, q1–q4, webcast, replay, transcript, press-release, financials, events, presentations, etc.). We rank them and fetch up to 2 additional pages.</li>
           </ul>
           <p className="text-[var(--muted)] text-base leading-relaxed mt-3">
             Only HTML from successful responses is used for analysis. No sitemap traversal or recursive crawl.

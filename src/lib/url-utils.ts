@@ -39,20 +39,26 @@ export function isLikelyIRPath(pathname: string): boolean {
   const lower = pathname.toLowerCase();
   const segments = lower.split("/").filter(Boolean);
   const irKeywords = [
+    "investor",
     "investors",
     "investor-relations",
     "ir",
+    "shareholder",
     "shareholders",
+    "financial",
     "financial-information",
+    "sec",
     "sec-filings",
     "news",
     "press",
+    "event",
     "events",
     "presentations",
     "governance",
     "esg",
     "earnings",
     "reports",
+    "filings",
   ];
   return segments.some((s) => irKeywords.some((k) => s.includes(k) || k.includes(s)));
 }
