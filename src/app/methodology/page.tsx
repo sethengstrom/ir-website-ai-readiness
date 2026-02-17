@@ -35,6 +35,9 @@ export default function MethodologyPage() {
           <p className="text-[var(--muted)] text-base leading-relaxed">
             The scanner compares two domains for <strong className="text-[var(--foreground)]">investor relations (IR) AI readiness</strong>—how well a site can be discovered, parsed, and cited by AI assistants and answer engines. We fetch a limited set of pages per domain (no deep crawl), then run deterministic analyzers. All scores are 0–100.
           </p>
+          <p className="text-[var(--muted)] text-base leading-relaxed mt-3">
+            We do not execute JavaScript; we only see the same initial HTML that many LLMs and answer engines see when they fetch a URL (e.g. for citation or RAG). A lot of AI retrieval runs without a headless browser—so a site that relies entirely on client-rendered content will score poorly here, and that reflects how it would perform for those systems. The scanner therefore measures readiness for the common case where the AI sees only server-rendered content.
+          </p>
         </section>
 
         <section>
@@ -120,6 +123,9 @@ export default function MethodologyPage() {
           <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Limitations</h2>
           <p className="text-[var(--muted)] text-base leading-relaxed">
             The scanner uses a shallow fetch and deterministic rules (regex, link patterns, heuristics). It does not use an LLM and does not execute JavaScript. We only see server-rendered HTML—so links or content that appear only after client-side rendering (e.g. in a React/Vue nav) may be reported as missing even when they exist on the live site. Results depend on the small set of URLs we fetch; if key content lives on paths we never request (e.g. a different earnings URL), we will report “Not answerable” or “Partial.” Scores are intended for comparison and improvement guidance, not as a guarantee of how any specific AI system will cite a site.
+          </p>
+          <p className="text-[var(--muted)] text-base leading-relaxed mt-3">
+            <strong className="text-[var(--foreground)]">Why can IR checklist be 0 when those items are on the site?</strong> The checklist looks only at links (<code className="text-sm bg-[var(--card)] px-1 rounded">a href</code>) in the initial HTML we receive. Many IR sites serve a minimal HTML shell and build the whole nav with JavaScript. We then never see links like SEC Filings or Events—they appear only after the app runs in the browser. So 0 here means we did not find matching links in the HTML we got, not that the site has no IR content.
           </p>
         </section>
 
