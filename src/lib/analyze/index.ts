@@ -85,26 +85,33 @@ export function analyzeDomain(result: CrawlResult): DomainResult {
     ...responseMetrics.findings,
   ];
 
-  const overallWeights = {
+  const investorQuestionCoverage = runAnalyzer(
+    "investorQuestionCoverage",
+    () => analyzeInvestorQuestionCoverage(result.pages),
+    getUnavailableInvestorCoverage()
+  );
+
+  // Technical foundation: same weighted blend of the five categories (used for Overall).
+  const technicalWeights = {
     crawlability: 0.2,
     structuredData: 0.2,
     parseability: 0.2,
     freshness: 0.15,
     irChecklist: 0.25,
   };
-  const overallScore = Math.round(
-    categoryScores.crawlability * overallWeights.crawlability +
-      categoryScores.structuredData * overallWeights.structuredData +
-      categoryScores.parseability * overallWeights.parseability +
-      categoryScores.freshness * overallWeights.freshness +
-      categoryScores.irChecklist * overallWeights.irChecklist
+  const technicalScore = Math.round(
+    categoryScores.crawlability * technicalWeights.crawlability +
+      categoryScores.structuredData * technicalWeights.structuredData +
+      categoryScores.parseability * technicalWeights.parseability +
+      categoryScores.freshness * technicalWeights.freshness +
+      categoryScores.irChecklist * technicalWeights.irChecklist
   );
 
-  const investorQuestionCoverage = runAnalyzer(
-    "investorQuestionCoverage",
-    () => analyzeInvestorQuestionCoverage(result.pages),
-    getUnavailableInvestorCoverage()
+  // Option A: Primary score = 50% investor question coverage + 50% technical foundation.
+  const overallScore = Math.round(
+    investorQuestionCoverage.coverageScore * 0.5 + technicalScore * 0.5
   );
+
   const aiCitationReadiness = Math.round(
     investorQuestionCoverage.coverageScore * 0.7 +
       ((crawlability.score + parseability.score) / 2) * 0.2 +

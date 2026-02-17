@@ -806,7 +806,7 @@ function HomeContent() {
               />
             </div>
             <p className="text-sm text-zinc-500">
-              This usually takes <strong className="text-zinc-400">under 15 seconds</strong>. We fetch the homepage, /investor, and up to 2 earnings-related pages per domain, then analyze each site. Please don’t close this page.
+              This usually takes <strong className="text-zinc-400">under 15 seconds</strong> (slow sites may take up to a minute). We fetch the homepage, robots.txt, sitemap, one IR page (your URL or /investor or /investors), and up to 2 earnings/events/presentations links per domain, then analyze each site. Please don’t close this page.
             </p>
           </div>
         )}

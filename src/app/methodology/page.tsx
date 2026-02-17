@@ -39,22 +39,17 @@ export default function MethodologyPage() {
         <section>
           <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Primary score: Overall readiness</h2>
           <p className="text-[var(--muted)] text-base leading-relaxed mb-3">
-            The main number shown is <strong className="text-[var(--foreground)]">Overall readiness</strong>: a weighted blend of the five category scores (Crawlability, Structured data, Parseability, Freshness, IR checklist). So the big number aligns with the category rows—if all five categories are high, Overall readiness is high.
+            The main number shown is <strong className="text-[var(--foreground)]">Overall readiness</strong>: how well the IR site is configured for LLMs to use it as a source for common investor questions. It is <strong className="text-[var(--foreground)]">50% investor question coverage</strong> (share of 12 high-impact questions answerable or partially answerable from fetched pages) plus <strong className="text-[var(--foreground)]">50% technical foundation</strong> (a weighted blend of the five category scores below). So the big number reflects both “can an LLM answer?” and “is the site technically ready?”
           </p>
           <p className="text-[var(--muted)] text-base leading-relaxed mb-3">
-            We also show <strong className="text-[var(--foreground)]">AI Citation Readiness</strong> as a secondary metric (under the main number). It is weighted for how likely an AI system is to find and cite your IR content when answering investor questions:
+            We also show <strong className="text-[var(--foreground)]">AI Citation Readiness</strong> as a secondary metric (under the main number). It uses a different blend to emphasize answerability: 70% question coverage, 20% crawlability and parseability, 10% structured data.
           </p>
-          <ul className="list-disc list-inside text-[var(--muted)] text-base space-y-1 ml-2">
-            <li><strong className="text-[var(--foreground)]">70%</strong> — Investor question coverage (share of 12 high-impact questions that are answerable or partially answerable from fetched pages)</li>
-            <li><strong className="text-[var(--foreground)]">20%</strong> — Crawlability and parseability (average of the two category scores)</li>
-            <li><strong className="text-[var(--foreground)]">10%</strong> — Structured data (JSON-LD + feeds)</li>
-          </ul>
         </section>
 
         <section>
           <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Investor question coverage (12 questions)</h2>
           <p className="text-[var(--muted)] text-base leading-relaxed mb-3">
-            We test 12 common investor questions per domain. For each question we scan the fetched pages (homepage, /investor, and up to 2 discovered “earnings hub” links) and look for evidence: links, numbers, or text snippets. Each question is scored as:
+            We test 12 common investor questions per domain. For each question we scan the fetched pages (homepage, one IR page (your URL or /investor or /investors), and up to 2 earnings/events/presentations links) and look for evidence: links, numbers, or text snippets. Each question is scored as:
           </p>
           <ul className="list-disc list-inside text-[var(--muted)] text-base space-y-1 ml-2 mb-3">
             <li><strong className="text-emerald-400">Answerable</strong> — Relevant page found, citable URL, and evidence snippet (and for revenue/EPS, a numeric extraction).</li>
@@ -96,9 +91,9 @@ export default function MethodologyPage() {
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Category scores (feed into Overall readiness)</h2>
+          <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Category scores (feed into the technical half of Overall readiness)</h2>
           <p className="text-[var(--muted)] text-base leading-relaxed mb-3">
-            The five category scores below are 0–100 each. Their weighted blend is the primary Overall readiness number. Weights:
+            The five category scores below are 0–100 each. Their weighted blend is the <strong className="text-[var(--foreground)]">technical foundation</strong> (50% of Overall readiness). Weights:
           </p>
           <ul className="list-disc list-inside text-[var(--muted)] text-base space-y-1 ml-2 mb-4">
             <li><strong className="text-[var(--foreground)]">Crawlability (20%)</strong> — robots.txt reachable, /investors and /investor-relations not disallowed, sitemap reachable, IR-related URLs discovered.</li>
