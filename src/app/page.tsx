@@ -113,7 +113,7 @@ const PRESET_IR_SITES_A = [
   { name: "NVIDIA", url: "https://investor.nvidia.com" },
 ] as const;
 const PRESET_IR_SITES_B = [
-  { name: "Workday", url: "https://workday.com" },
+  { name: "Workday", url: "https://investor.workday.com/" },
   { name: "Tetra Tech", url: "https://investor.tetratech.com/overview/default.aspx" },
   { name: "Emera", url: "https://investors.emera.com/overview/default.aspx" },
 ] as const;
