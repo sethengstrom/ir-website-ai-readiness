@@ -79,6 +79,8 @@ function parseRobotsText(text: string): Omit<RobotsResult, "reachable" | "rawCon
   const out = {
     disallowsInvestors: false,
     disallowsInvestorRelations: false,
+    disallowsInvestor: false,
+    disallowsIr: false,
     sitemapUrls: [] as string[],
   };
   const lines = text.split(/\r?\n/).map((l) => l.trim());
@@ -103,6 +105,10 @@ function parseRobotsText(text: string): Omit<RobotsResult, "reachable" | "rawCon
           path === "/investor-relations/"
         )
           out.disallowsInvestorRelations = true;
+        if (path === "/investor" || path === "/investor/" || (path.startsWith("/investor/") && !path.startsWith("/investors")))
+          out.disallowsInvestor = true;
+        if (path === "/ir" || path === "/ir/" || path.startsWith("/ir/"))
+          out.disallowsIr = true;
       }
       const sitemap = line.match(/^sitemap:\s*(.+)/i);
       if (sitemap) out.sitemapUrls.push(sitemap[1].trim());
@@ -240,7 +246,7 @@ function emptyCrawlResult(origin: string): CrawlResult {
   const base = origin.replace(/\/$/, "");
   return {
     origin: base,
-    robots: { reachable: false, disallowsInvestors: false, disallowsInvestorRelations: false, rawContent: null, sitemapUrls: [] },
+    robots: { reachable: false, disallowsInvestors: false, disallowsInvestorRelations: false, disallowsInvestor: false, disallowsIr: false, rawContent: null, sitemapUrls: [] },
     sitemap: { reachable: false, urlCount: 0, irUrlCount: 0, urls: [], irUrls: [], childSitemaps: [] },
     pages: [],
     urlsFromCrawl: [],
@@ -248,10 +254,10 @@ function emptyCrawlResult(origin: string): CrawlResult {
   };
 }
 
-/** True if the hostname looks like an IR subdomain (investor., ir., investors.). */
+/** True if the hostname looks like an IR subdomain (investor., ir., investors., stock.). */
 function isIRSubdomain(hostname: string): boolean {
   const h = hostname.toLowerCase();
-  return h.startsWith("investor.") || h.startsWith("ir.") || h.startsWith("investors.");
+  return h.startsWith("investor.") || h.startsWith("ir.") || h.startsWith("investors.") || h.startsWith("stock.");
 }
 
 export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
@@ -301,6 +307,8 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
     reachable: false,
     disallowsInvestors: false,
     disallowsInvestorRelations: false,
+    disallowsInvestor: false,
+    disallowsIr: false,
     rawContent: null,
     sitemapUrls: [],
   };
@@ -343,6 +351,8 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
         const parsed = parseRobotsText(body);
         robots.disallowsInvestors = parsed.disallowsInvestors;
         robots.disallowsInvestorRelations = parsed.disallowsInvestorRelations;
+        robots.disallowsInvestor = parsed.disallowsInvestor;
+        robots.disallowsIr = parsed.disallowsIr;
         robots.sitemapUrls = parsed.sitemapUrls;
       }
       continue;
@@ -376,6 +386,44 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
       urlsFromCrawl.push(url);
       try {
         if (isLikelyIRPath(new URL(url).pathname)) irUrlsFromCrawl.push(url);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  // If the 4th URL (IR page) failed (404 or non-HTML), try one fallback path so we don't miss the IR landing.
+  if (!htmlByUrl.has(fourthHtmlUrl) && userPath === null) {
+    const fallbackPath =
+      fourthHtmlUrl.endsWith("/investors") || fourthHtmlUrl.endsWith("/investors/")
+        ? `${base}/investor`
+        : fourthHtmlUrl.endsWith("/investor") || fourthHtmlUrl.endsWith("/investor/")
+          ? `${base}/investor-relations`
+          : null;
+    if (fallbackPath && fallbackPath !== fourthHtmlUrl) {
+      try {
+        const fallbackRes = await fetchOne(fallbackPath, true);
+        if (
+          fallbackRes.status === 200 &&
+          fallbackRes.body &&
+          (fallbackRes.contentType.includes("text/html") || fallbackRes.contentType.includes("application/xhtml"))
+        ) {
+          htmlByUrl.set(fallbackPath, fallbackRes.body);
+          pages.push({
+            url: fallbackPath,
+            html: fallbackRes.body,
+            status: fallbackRes.status,
+            contentType: fallbackRes.contentType,
+            responseTimeMs: fallbackRes.responseTimeMs,
+            lastModified: fallbackRes.lastModified ?? undefined,
+          });
+          urlsFromCrawl.push(fallbackPath);
+          try {
+            if (isLikelyIRPath(new URL(fallbackPath).pathname)) irUrlsFromCrawl.push(fallbackPath);
+          } catch {
+            // ignore
+          }
+        }
       } catch {
         // ignore
       }

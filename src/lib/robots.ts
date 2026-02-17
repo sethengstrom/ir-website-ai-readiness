@@ -8,6 +8,10 @@ export interface RobotsResult {
   reachable: boolean;
   disallowsInvestors: boolean;
   disallowsInvestorRelations: boolean;
+  /** True if /investor (singular) is disallowed. */
+  disallowsInvestor: boolean;
+  /** True if /ir path is disallowed. */
+  disallowsIr: boolean;
   rawContent: string | null;
   sitemapUrls: string[];
 }
@@ -17,6 +21,8 @@ export async function fetchRobots(origin: string): Promise<RobotsResult> {
     reachable: false,
     disallowsInvestors: false,
     disallowsInvestorRelations: false,
+    disallowsInvestor: false,
+    disallowsIr: false,
     rawContent: null,
     sitemapUrls: [],
   };
@@ -54,6 +60,10 @@ export async function fetchRobots(origin: string): Promise<RobotsResult> {
             path === "/investor-relations/"
           )
             result.disallowsInvestorRelations = true;
+          if (path === "/investor" || path === "/investor/" || (path.startsWith("/investor/") && !path.startsWith("/investors")))
+            result.disallowsInvestor = true;
+          if (path === "/ir" || path === "/ir/" || path.startsWith("/ir/"))
+            result.disallowsIr = true;
         }
         const sitemap = line.match(/^sitemap:\s*(.+)/i);
         if (sitemap) result.sitemapUrls.push(sitemap[1].trim());

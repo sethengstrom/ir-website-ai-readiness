@@ -58,6 +58,9 @@ function pageMatchesEarningsHub(url: string, html: string): boolean {
 
   let score = 0;
 
+  // Title "investor relations" is a strong signal for typical IR landing pages
+  if (title.includes("investor relations")) score += 2;
+
   // Path: strong signal
   for (const phrase of EARNINGS_PHRASES) {
     if (path.includes(phrase)) {
@@ -69,7 +72,7 @@ function pageMatchesEarningsHub(url: string, html: string): boolean {
     if (term.length >= 2 && path.includes(term)) score += 2;
   }
 
-  // Title: strong signal
+  // Title: strong signal (phrases and terms)
   for (const phrase of EARNINGS_PHRASES) {
     if (title.includes(phrase)) {
       score += 2;

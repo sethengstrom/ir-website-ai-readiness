@@ -75,6 +75,52 @@ export function analyzeCrawlability(result: CrawlResult): { score: number; findi
     });
   }
 
+  // robots does not disallow /investor (singular)
+  total += 1;
+  if (!result.robots.disallowsInvestor) {
+    score += 1;
+    findings.push({
+      category: "Crawlability",
+      subcategory: "robots.txt",
+      signal: "/investor not disallowed",
+      score: 100,
+      evidence: { snippet: "No Disallow: /investor", method: "robots_txt" },
+      passed: true,
+    });
+  } else {
+    findings.push({
+      category: "Crawlability",
+      subcategory: "robots.txt",
+      signal: "/investor is disallowed",
+      score: 0,
+      evidence: { snippet: "Disallow: /investor", method: "robots_txt" },
+      passed: false,
+    });
+  }
+
+  // robots does not disallow /ir
+  total += 1;
+  if (!result.robots.disallowsIr) {
+    score += 1;
+    findings.push({
+      category: "Crawlability",
+      subcategory: "robots.txt",
+      signal: "/ir not disallowed",
+      score: 100,
+      evidence: { snippet: "No Disallow: /ir", method: "robots_txt" },
+      passed: true,
+    });
+  } else {
+    findings.push({
+      category: "Crawlability",
+      subcategory: "robots.txt",
+      signal: "/ir is disallowed",
+      score: 0,
+      evidence: { snippet: "Disallow: /ir", method: "robots_txt" },
+      passed: false,
+    });
+  }
+
   // sitemap reachable
   total += 1;
   if (result.sitemap.reachable) {

@@ -96,7 +96,7 @@ export default function MethodologyPage() {
             The five category scores below are 0–100 each. Their weighted blend is the <strong className="text-[var(--foreground)]">technical foundation</strong> (50% of Overall readiness). Weights:
           </p>
           <ul className="list-disc list-inside text-[var(--muted)] text-base space-y-1 ml-2 mb-4">
-            <li><strong className="text-[var(--foreground)]">Crawlability (20%)</strong> — robots.txt reachable, /investors and /investor-relations not disallowed, sitemap reachable, IR-related URLs discovered.</li>
+            <li><strong className="text-[var(--foreground)]">Crawlability (20%)</strong> — robots.txt reachable, /investors, /investor-relations, /investor, and /ir not disallowed, sitemap reachable, IR-related URLs discovered.</li>
             <li><strong className="text-[var(--foreground)]">Structured data (20%)</strong> — JSON-LD schema types (Organization, WebPage, Event, etc.), machine-readable dates, Organization identity, RSS/Atom feeds. The table row shows this full category score; the caption under that row also shows “JSON-LD only” for transparency.</li>
             <li><strong className="text-[var(--foreground)]">Parseability (20%)</strong> — Server-rendered text length, main-content ratio, H1/H2 structure, canonical URL, title and meta description.</li>
             <li><strong className="text-[var(--foreground)]">Freshness (15%)</strong> — Earnings/results hub detected, visible or schema date on that hub (so AI can cite recency), dates on other pages, archive/releases-style URLs.</li>
@@ -117,7 +117,7 @@ export default function MethodologyPage() {
         <section>
           <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Limitations</h2>
           <p className="text-[var(--muted)] text-base leading-relaxed">
-            The scanner uses a shallow fetch and deterministic rules (regex, link patterns, heuristics). It does not use an LLM. Results depend on the small set of URLs we fetch; if key content lives on paths we never request (e.g. a different earnings URL), we will report “Not answerable” or “Partial.” Scores are intended for comparison and improvement guidance, not as a guarantee of how any specific AI system will cite a site.
+            The scanner uses a shallow fetch and deterministic rules (regex, link patterns, heuristics). It does not use an LLM and does not execute JavaScript. We only see server-rendered HTML—so links or content that appear only after client-side rendering (e.g. in a React/Vue nav) may be reported as missing even when they exist on the live site. Results depend on the small set of URLs we fetch; if key content lives on paths we never request (e.g. a different earnings URL), we will report “Not answerable” or “Partial.” Scores are intended for comparison and improvement guidance, not as a guarantee of how any specific AI system will cite a site.
           </p>
         </section>
 
