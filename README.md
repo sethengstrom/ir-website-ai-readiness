@@ -77,8 +77,8 @@ No code changes are required beyond the schema provider and env.
 
 The scanner is **deterministic** and **thorough**: it fetches more pages per domain and allows slower sites more time. It does **not** perform deep crawling or sitemap traversal.
 
-- **Per domain:** Two-phase fetch. Phase 1a: homepage, `/robots.txt`, `/sitemap.xml`. We **discover** up to **2** IR entry URLs (your path; else homepage nav links; else sitemap; else conventional path), fetch them, and try one fallback if the first fails. Phase 2: up to **8** earnings/events/presentations links from phase-1 HTML. Typical total: **up to ~14 HTML pages** per domain (home + 2 IR + fallback + 8 follow-ups). No recursive crawl.
-- **Timeout:** **20 seconds** per request. Total scan can take up to **2 minutes** (120s API timeout) so thorough crawls complete.
+- **Per domain:** Two-phase fetch. Phase 1a: homepage, `/robots.txt`, `/sitemap.xml`. We **discover** up to **3** IR entry URLs (your path; else homepage nav links; else sitemap; else conventional path), fetch them, and try one fallback if the first fails. Phase 2: up to **14** earnings/events/presentations links from phase-1 HTML (fetched sequentially with progress updates). Typical total: **up to ~20 HTML pages** per domain. No recursive crawl. Domains are crawled **sequentially** so progress messages stay clear.
+- **Timeout:** **25 seconds** per request. Total scan can take up to **4 minutes** (240s API timeout) for a deep two-domain comparison.
 - **Robots.txt:** Fetched and parsed; disallow for `/investors`, `/investor-relations`, `/investor`, and `/ir` is checked (crawlability score reflects all four).
 - **Sitemap.xml:** Fetched and parsed only to count `<loc>` URLs in that single file; **URLs inside are not crawled**.
 - **Analysis:** JSON-LD blocks, `<title>`, canonical, meta description, Organization/Corporation schema, HTTP status, response time, Last-Modified. Same output shape (scores + findings) so the UI is unchanged.

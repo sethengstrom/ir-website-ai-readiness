@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-// Thorough crawl: more requests and longer timeouts; allow up to 2 min for scan.
-export const maxDuration = 60;
+// Deep crawl: sequential domains, many progress updates; allow up to 4 min for scan.
+export const maxDuration = 120;
 
 import { NextRequest, NextResponse } from "next/server";
 import { SCAN_ERROR_CODES, messageForCode, isScanErrorCode } from "@/lib/scan-errors";
@@ -10,8 +10,8 @@ const CACHE_DAYS = 7;
 /** Set to true to return cached results for same domain pair within CACHE_DAYS. Disabled while scans are fast. */
 const USE_CACHE = false;
 
-/** Global scan timeout so thorough crawl (more pages, slower sites) can complete. */
-const SCAN_TIMEOUT_MS = 120_000;
+/** Global scan timeout so deep crawl (sequential, many pages) can complete. */
+const SCAN_TIMEOUT_MS = 240_000;
 
 /** Rate limit: max requests per IP per window. */
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -127,33 +127,70 @@ export async function POST(request: NextRequest) {
           controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
 
         try {
-          send({
-            type: "progress",
-            phase: "crawling",
-            message: singleDomain ? "Crawling domain…" : "Crawling Domain A & B…",
-            progress: 15,
-          });
+          let progress = 0;
+          const sendProgress = (message: string, p?: number) => {
+            if (p !== undefined) progress = p;
+            send({
+              type: "progress",
+              phase: progress < 40 ? "crawling" : progress < 72 ? "crawling" : "analyzing",
+              message,
+              progress,
+            });
+          };
 
-          const crawlPromise = singleDomain
-            ? crawlDomain(domainA).then((r) => [r, null] as const)
-            : Promise.all([crawlDomain(domainA), crawlDomain(domainB)]).then(([a, b]) => [a, b] as const);
+          sendProgress("Starting deep scan…", 2);
+
           const timeoutPromise = new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error("SCAN_TIMEOUT")), SCAN_TIMEOUT_MS)
           );
-          const [crawlResultA, crawlResultB] = await Promise.race([
-            crawlPromise,
+
+          sendProgress(singleDomain ? "Crawling domain…" : "Crawling Domain A…", 5);
+          let crawlProgress = 8;
+          const crawlResultA = await Promise.race([
+            crawlDomain(domainA, {
+              onProgress: (msg) => {
+                crawlProgress = Math.min(38, crawlProgress + 2);
+                sendProgress(msg, crawlProgress);
+              },
+            }),
             timeoutPromise,
           ]);
 
-          send({
-            type: "progress",
-            phase: "analyzing",
-            message: "Analyzing crawlability, structure & content…",
-            progress: 50,
+          let crawlResultB: typeof crawlResultA | null = null;
+          if (!singleDomain) {
+            sendProgress("Crawling Domain B…", 42);
+            crawlProgress = 45;
+            crawlResultB = await Promise.race([
+              crawlDomain(domainB, {
+                onProgress: (msg) => {
+                  crawlProgress = Math.min(68, crawlProgress + 2);
+                  sendProgress(msg, crawlProgress);
+                },
+              }),
+              timeoutPromise,
+            ]);
+          }
+
+          sendProgress("Analyzing Domain A (crawlability, structure, content)…", 72);
+          let analyzeProgress = 74;
+          const resultA = analyzeDomain(crawlResultA, {
+            onProgress: (msg) => {
+              analyzeProgress = Math.min(88, analyzeProgress + 3);
+              sendProgress(msg, analyzeProgress);
+            },
           });
 
-          const resultA = analyzeDomain(crawlResultA);
-          const resultB = crawlResultB != null ? analyzeDomain(crawlResultB) : null;
+          let resultB = null;
+          if (crawlResultB != null) {
+            sendProgress("Analyzing Domain B…", 90);
+            analyzeProgress = 92;
+            resultB = analyzeDomain(crawlResultB, {
+              onProgress: (msg) => {
+                analyzeProgress = Math.min(97, analyzeProgress + 2);
+                sendProgress(msg, analyzeProgress);
+              },
+            });
+          }
 
           await prisma.scanRun.update({
             where: { id: run.id },

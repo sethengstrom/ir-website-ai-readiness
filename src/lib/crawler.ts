@@ -123,13 +123,13 @@ function pickBestSitemapIRUrl(irUrls: string[], origin: string): string | null {
 }
 
 /** Per-request timeout; allow slow IR sites more time to respond. */
-const FETCH_TIMEOUT_MS = 20000;
+const FETCH_TIMEOUT_MS = 25000;
 /** Phase 1a: home, robots, sitemap only. IR URL(s) chosen by discovery then fetched separately. */
 const PHASE1A_COUNT = 3;
 /** Max number of additional IR entry pages to fetch when discovery yields multiple (e.g. nav + sitemap). */
-const MAX_IR_PAGES = 2;
-/** Max earnings/events/presentations links to fetch in phase 2 (more thorough crawl). */
-const MAX_FOLLOWUP = 8;
+const MAX_IR_PAGES = 3;
+/** Max earnings/events/presentations links to fetch in phase 2 (deep crawl). */
+const MAX_FOLLOWUP = 14;
 /** Browser-like UA so IR sites (e.g. Ciena) don't block or throttle server requests. */
 const USER_AGENT =
   "Mozilla/5.0 (compatible; IR-AI-Readiness-Scanner/1.0; +https://github.com/ir-ai-readiness) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36";
@@ -188,6 +188,11 @@ export interface CrawlResult {
   pages: CrawlPage[];
   urlsFromCrawl: string[];
   irUrlsFromCrawl: string[];
+}
+
+/** Optional progress callback for UI updates during crawl. */
+export interface CrawlOptions {
+  onProgress?: (message: string) => void;
 }
 
 function parseRobotsText(text: string): Omit<RobotsResult, "reachable" | "rawContent"> {
@@ -284,7 +289,7 @@ function extractEarningsCandidates(html: string, baseOrigin: string): string[] {
     }
   });
   scored.sort((a, b) => (b.score !== a.score ? b.score - a.score : a.url.localeCompare(b.url)));
-  return scored.map((s) => s.url).slice(0, 15);
+  return scored.map((s) => s.url).slice(0, 22);
 }
 
 function shouldRetry(status: number): boolean {
@@ -375,7 +380,8 @@ function isIRSubdomain(hostname: string): boolean {
   return h.startsWith("investor.") || h.startsWith("ir.") || h.startsWith("investors.") || h.startsWith("stock.");
 }
 
-export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
+export async function crawlDomain(domainInput: string, options?: CrawlOptions): Promise<CrawlResult> {
+  const onProgress = options?.onProgress;
   let origin: string;
   let userPath: string | null = null;
   if (domainInput.startsWith("http")) {
@@ -402,6 +408,7 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
   })();
 
   try {
+  onProgress?.("Fetching homepage, robots.txt & sitemap…");
   const phase1aUrls: { url: string; acceptHtmlOnly: boolean }[] = [
     { url: `${base}/`, acceptHtmlOnly: true },
     { url: `${base}/robots.txt`, acceptHtmlOnly: false },
@@ -496,8 +503,10 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
     }
   }
 
+  onProgress?.("Parsing sitemap & discovering IR pages…");
   // If sitemap wasn't at root, try first Sitemap: from robots so we have irUrls for discovery.
   if (!sitemap.reachable && robots.sitemapUrls.length > 0) {
+    onProgress?.("Checking sitemap from robots.txt…");
     const firstSitemapUrl = robots.sitemapUrls[0];
     try {
       const sitemapRes = await fetchOne(firstSitemapUrl, false);
@@ -532,6 +541,7 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
     if (fromNav[1] && fromNav[1] !== first && irUrlsToFetch.length < MAX_IR_PAGES) irUrlsToFetch.push(fromNav[1]);
   }
 
+  onProgress?.("Fetching IR entry pages…");
   for (const irUrl of irUrlsToFetch) {
     if (htmlByUrl.has(irUrl)) continue;
     try {
@@ -603,7 +613,6 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
 
   const alreadyFetched = new Set(pages.map((p) => p.url));
   const followCandidates: string[] = [];
-  // Iterate phase-1 HTML in stable URL order so phase-2 link selection is deterministic for the same content.
   const phase1HtmlUrls = [...htmlByUrl.keys()].sort((a, b) => a.localeCompare(b));
   for (const url of phase1HtmlUrls) {
     const html = htmlByUrl.get(url);
@@ -615,31 +624,38 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
     .slice(0, MAX_FOLLOWUP);
 
   if (followUrls.length > 0) {
-    const phase2Settled = await Promise.allSettled(
-      followUrls.map((url) => fetchOne(url, true).then((r) => ({ url, ...r })))
-    );
-    for (let i = 0; i < phase2Settled.length; i++) {
-      const p = phase2Settled[i];
-      const { url, status, contentType, body, responseTimeMs, lastModified } =
-        p.status === "fulfilled" ? p.value : { url: followUrls[i], status: 0, contentType: "", body: "", responseTimeMs: 0, lastModified: null };
-      if (status === 200 && body && (contentType.includes("text/html") || contentType.includes("application/xhtml"))) {
-        pages.push({
-          url,
-          html: body,
-          status,
-          contentType,
-          responseTimeMs,
-          lastModified: lastModified ?? undefined,
-        });
-        urlsFromCrawl.push(url);
-        try {
-          if (isLikelyIRPath(new URL(url).pathname)) irUrlsFromCrawl.push(url);
-        } catch {
-          // ignore
+    const total = followUrls.length;
+    for (let i = 0; i < followUrls.length; i++) {
+      onProgress?.(`Fetching earnings & events link ${i + 1} of ${total}…`);
+      const url = followUrls[i];
+      try {
+        const r = await fetchOne(url, true);
+        if (
+          r.status === 200 &&
+          r.body &&
+          (r.contentType.includes("text/html") || r.contentType.includes("application/xhtml"))
+        ) {
+          pages.push({
+            url,
+            html: r.body,
+            status: r.status,
+            contentType: r.contentType,
+            responseTimeMs: r.responseTimeMs,
+            lastModified: r.lastModified ?? undefined,
+          });
+          urlsFromCrawl.push(url);
+          try {
+            if (isLikelyIRPath(new URL(url).pathname)) irUrlsFromCrawl.push(url);
+          } catch {
+            // ignore
+          }
         }
+      } catch {
+        // ignore
       }
     }
   }
+  onProgress?.(`Crawl complete. ${pages.length} pages fetched.`);
 
   return {
     origin: base,

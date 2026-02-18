@@ -10,8 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
-- **Thorough crawl:** Scans are slower and more thorough. Per domain: up to **2** IR entry pages (when discovery yields multiple), up to **8** phase-2 earnings/events/presentations links (was 2), **20s** per-request timeout (was 12s), **120s** total scan timeout (was 60s). API `maxDuration` increased to 60s. More earnings candidates are considered (15 per page) so phase-2 has more URLs to choose from. Typical page count per domain is now up to ~12–14 HTML pages instead of 3–4.
-- **README and methodology** updated to describe the thorough crawl and new timeouts.
+- **Deep crawl:** Deeper and slower. Per domain: up to **3** IR entry pages, up to **14** phase-2 earnings/events/presentations links (fetched sequentially with per-link progress). **25s** per-request timeout, **240s** total scan timeout. API `maxDuration` 120s. Phase-2 fetches one URL at a time so the UI can show “Fetching earnings & events link 1 of 14…”, etc. Typical page count per domain up to ~20 HTML pages.
+- **Progress messaging:** Crawler and analyzer accept optional `onProgress(message)` callbacks. Scan route runs domains **sequentially** (Domain A then Domain B) and streams frequent progress events: “Fetching homepage, robots.txt & sitemap…”, “Discovering IR pages…”, “Fetching earnings & events link 3 of 14…”, “Analyzing crawlability…”, “Evaluating investor question coverage…”, etc. Progress bar advances with each step so the scan clearly looks like it’s working.
+- **README and methodology** updated for deep crawl and progress behavior.
 
 ---
 

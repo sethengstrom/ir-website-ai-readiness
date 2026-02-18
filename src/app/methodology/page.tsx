@@ -83,12 +83,12 @@ export default function MethodologyPage() {
         <section>
           <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Crawl process</h2>
           <p className="text-[var(--muted)] text-base leading-relaxed mb-3">
-            Per domain we do a thorough two-phase fetch (20s per request; scan can take up to 2 minutes) to match how IR sites are structured:
+            Per domain we do a deep two-phase fetch (25s per request; scan can take up to 4 minutes for two domains) to match how IR sites are structured. Progress updates are shown during crawl and analysis.
           </p>
           <ul className="list-disc list-inside text-[var(--muted)] text-base space-y-1 ml-2">
             <li><strong className="text-[var(--foreground)]">Phase 1a (3 requests):</strong> Homepage, robots.txt, sitemap.xml. If not at root, we try the first Sitemap: from robots.txt.</li>
-            <li><strong className="text-[var(--foreground)]">IR page discovery:</strong> We choose up to 2 IR URLs from the site when you do not paste a full URL (homepage nav, then sitemap, then conventional path). We fetch them and one fallback if the first fails.</li>
-            <li><strong className="text-[var(--foreground)]">Phase 2 (up to 8 requests):</strong> From phase 1 HTML we collect same-origin links that match earnings-related terms (earnings, results, quarterly, webcast, transcript, events, presentations, etc.). We rank them and fetch up to 8 additional pages.</li>
+            <li><strong className="text-[var(--foreground)]">IR page discovery:</strong> We choose up to 3 IR URLs from the site when you do not paste a full URL (homepage nav, then sitemap, then conventional path). We fetch them and one fallback if the first fails.</li>
+            <li><strong className="text-[var(--foreground)]">Phase 2 (up to 14 requests):</strong> From phase 1 HTML we collect same-origin links that match earnings-related terms. We rank them and fetch up to 14 additional pages, one at a time, with progress updates.</li>
           </ul>
           <p className="text-[var(--muted)] text-base leading-relaxed mt-3">
             Only HTML from successful responses is used for analysis. No sitemap traversal or recursive crawl. Discovery from nav and sitemap improves accuracy for sites that use non-standard IR paths.

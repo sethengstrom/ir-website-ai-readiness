@@ -37,33 +37,43 @@ function runAnalyzer<T>(name: string, fn: () => T, fallback: T): T {
   }
 }
 
-export function analyzeDomain(result: CrawlResult): DomainResult {
-  // Pre-extract JSON-LD facts per page so investor-questions, structured-data, and freshness can use schema values.
+export interface AnalyzeOptions {
+  onProgress?: (message: string) => void;
+}
+
+export function analyzeDomain(result: CrawlResult, options?: AnalyzeOptions): DomainResult {
+  const onProgress = options?.onProgress;
+  onProgress?.("Extracting structured data from pages…");
   const pagesWithFacts = result.pages.map((p) => ({
     ...p,
     jsonLdFacts: extractJsonLdFacts(p.html, p.url),
   }));
 
+  onProgress?.("Analyzing crawlability (robots, sitemap, IR URLs)…");
   const crawlability = runAnalyzer(
     "crawlability",
     () => analyzeCrawlability(result),
     { score: DEFAULT_CATEGORY_SCORE, findings: EMPTY_FINDINGS }
   );
+  onProgress?.("Analyzing structured data & JSON-LD…");
   const structuredData = runAnalyzer(
     "structuredData",
     () => analyzeStructuredData(pagesWithFacts, result.origin),
     { score: DEFAULT_CATEGORY_SCORE, findings: EMPTY_FINDINGS, breakdown: UNAVAILABLE_STRUCTURED_BREAKDOWN }
   );
+  onProgress?.("Analyzing parseability (content, headings, canonical)…");
   const parseability = runAnalyzer(
     "parseability",
     () => analyzeParseability(result.pages),
     { score: DEFAULT_CATEGORY_SCORE, findings: EMPTY_FINDINGS }
   );
+  onProgress?.("Analyzing freshness & earnings hub…");
   const freshness = runAnalyzer(
     "freshness",
     () => analyzeFreshness(pagesWithFacts),
     { score: DEFAULT_CATEGORY_SCORE, findings: EMPTY_FINDINGS }
   );
+  onProgress?.("Checking IR checklist (filings, events, contact)…");
   const irChecklist = runAnalyzer(
     "irChecklist",
     () => analyzeIRChecklist(result.pages),
@@ -92,12 +102,14 @@ export function analyzeDomain(result: CrawlResult): DomainResult {
     ...responseMetrics.findings,
   ];
 
+  onProgress?.("Evaluating investor question coverage…");
   const investorQuestionCoverage = runAnalyzer(
     "investorQuestionCoverage",
     () => analyzeInvestorQuestionCoverage(pagesWithFacts),
     getUnavailableInvestorCoverage()
   );
 
+  onProgress?.("Computing overall & category scores…");
   // Technical foundation: same weighted blend of the five categories (used for Overall).
   const technicalWeights = {
     crawlability: 0.2,
