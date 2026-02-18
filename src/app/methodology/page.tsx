@@ -33,7 +33,7 @@ export default function MethodologyPage() {
         <section>
           <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Overview</h2>
           <p className="text-[var(--muted)] text-base leading-relaxed">
-            The scanner compares two domains for <strong className="text-[var(--foreground)]">investor relations (IR) AI readiness</strong>—how well a site can be discovered, parsed, and cited by AI assistants and answer engines. We fetch a limited set of pages per domain (deep crawl: up to 3 IR pages and 14 earnings/events links), then run deterministic analyzers. All scores are 0–100.
+            The scanner compares two domains for <strong className="text-[var(--foreground)]">investor relations (IR) AI readiness</strong>—how well a site can be discovered, parsed, and cited by AI assistants and answer engines. We fetch a limited set of pages per domain (deep crawl: up to 3 IR pages and 20 earnings/events links), then run deterministic analyzers. All scores are 0–100.
           </p>
           <p className="text-[var(--muted)] text-base leading-relaxed mt-3">
             We do not execute JavaScript; we only see the same initial HTML that many LLMs and answer engines see when they fetch a URL (e.g. for citation or RAG). A lot of AI retrieval runs without a headless browser—so a site that relies entirely on client-rendered content will score poorly here, and that reflects how it would perform for those systems. The scanner therefore measures readiness for the common case where the AI sees only server-rendered content.
@@ -63,7 +63,7 @@ export default function MethodologyPage() {
         <section>
           <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Investor question coverage (12 questions)</h2>
           <p className="text-[var(--muted)] text-base leading-relaxed mb-3">
-            We test 12 common investor questions per domain. For each question we scan the fetched pages (homepage, up to 3 IR pages from discovery or your URL, and up to 14 earnings/events/presentations links) and look for evidence: links, numbers, or text snippets. Each question is scored as:
+            We test 12 common investor questions per domain. For each question we scan the fetched pages (homepage, up to 3 IR pages from discovery or your URL, and up to 20 earnings/events/presentations links) and look for evidence: links, numbers, or text snippets. Each question is scored as:
           </p>
           <ul className="list-disc list-inside text-[var(--muted)] text-base space-y-1 ml-2 mb-3">
             <li><strong className="text-emerald-400">Answerable</strong> — Relevant page found, citable URL, and evidence snippet (and for revenue/EPS, a numeric extraction).</li>
@@ -93,12 +93,12 @@ export default function MethodologyPage() {
         <section>
           <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Crawl process</h2>
           <p className="text-[var(--muted)] text-base leading-relaxed mb-3">
-            Per domain we do a deep two-phase fetch (25s per request; scan can take up to 4 minutes for two domains) to match how IR sites are structured. Progress updates are shown during crawl and analysis.
+            Per domain we do a deep two-phase fetch (25s per request; scans typically complete in under a minute). Progress updates are shown during crawl and analysis.
           </p>
           <ul className="list-disc list-inside text-[var(--muted)] text-base space-y-1 ml-2">
             <li><strong className="text-[var(--foreground)]">Phase 1a (3 requests):</strong> Homepage, robots.txt, sitemap.xml. If not at root, we try the first Sitemap: from robots.txt.</li>
             <li><strong className="text-[var(--foreground)]">IR page discovery:</strong> We choose up to 3 IR URLs from the site when you do not paste a full URL (homepage nav, then sitemap, then conventional path). We fetch them and one fallback if the first fails.</li>
-            <li><strong className="text-[var(--foreground)]">Phase 2 (up to 14 requests):</strong> From phase 1 HTML we collect same-origin links that match earnings-related terms. We rank them and fetch up to 14 additional pages, one at a time, with progress updates.</li>
+            <li><strong className="text-[var(--foreground)]">Phase 2 (up to 20 requests):</strong> From phase 1 HTML we collect same-origin links that match earnings-related terms. We rank them and fetch up to 20 additional pages, one at a time, with progress updates.</li>
           </ul>
           <p className="text-[var(--muted)] text-base leading-relaxed mt-3">
             Only HTML from successful responses is used for analysis. No sitemap traversal or recursive crawl. Discovery from nav and sitemap improves accuracy for sites that use non-standard IR paths.

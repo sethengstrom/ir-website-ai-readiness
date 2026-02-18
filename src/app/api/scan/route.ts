@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-// Deep crawl: sequential domains, many progress updates; allow up to 4 min for scan.
+// Deep crawl: sequential domains, many progress updates. Typically under 1 min; timeout 4 min for slow sites.
 export const maxDuration = 120;
 
 import { NextRequest, NextResponse } from "next/server";

@@ -77,8 +77,8 @@ No code changes are required beyond the schema provider and env.
 
 The scanner is **deterministic** and **thorough**: it fetches more pages per domain and allows slower sites more time. It does **not** perform deep crawling or sitemap traversal.
 
-- **Per domain:** Two-phase fetch. Phase 1a: homepage, `/robots.txt`, `/sitemap.xml`. We **discover** up to **3** IR entry URLs (your path; else homepage nav links; else sitemap; else conventional path), fetch them, and try one fallback if the first fails. Phase 2: up to **14** earnings/events/presentations links from phase-1 HTML (fetched sequentially with progress updates). Typical total: **up to ~20 HTML pages** per domain. No recursive crawl. Domains are crawled **sequentially** so progress messages stay clear.
-- **Timeout:** **25 seconds** per request. Total scan can take up to **4 minutes** (240s API timeout) for a deep two-domain comparison.
+- **Per domain:** Two-phase fetch. Phase 1a: homepage, `/robots.txt`, `/sitemap.xml`. We **discover** up to **3** IR entry URLs (your path; else homepage nav links; else sitemap; else conventional path), fetch them, and try one fallback if the first fails. Phase 2: up to **20** earnings/events/presentations links from phase-1 HTML (fetched sequentially with progress updates). Typical total: **up to ~25 HTML pages** per domain. No recursive crawl. Domains are crawled **sequentially** so progress messages stay clear.
+- **Timeout:** **25 seconds** per request. Scans typically complete in **under a minute** (API timeout 4 min for slow sites).
 - **Robots.txt:** Fetched and parsed; disallow for `/investors`, `/investor-relations`, `/investor`, and `/ir` is checked (crawlability score reflects all four).
 - **Sitemap.xml:** Fetched and parsed only to count `<loc>` URLs in that single file; **URLs inside are not crawled**.
 - **Analysis:** JSON-LD blocks, `<title>`, canonical, meta description, Organization/Corporation schema, HTTP status, response time, Last-Modified. Same output shape (scores + findings) so the UI is unchanged.

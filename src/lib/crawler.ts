@@ -128,8 +128,8 @@ const FETCH_TIMEOUT_MS = 25000;
 const PHASE1A_COUNT = 3;
 /** Max number of additional IR entry pages to fetch when discovery yields multiple (e.g. nav + sitemap). */
 const MAX_IR_PAGES = 3;
-/** Max earnings/events/presentations links to fetch in phase 2 (deep crawl). */
-const MAX_FOLLOWUP = 14;
+/** Max earnings/events/presentations links to fetch in phase 2 (aim for ~20s scan time with more accurate results). */
+const MAX_FOLLOWUP = 20;
 /** Browser-like UA so IR sites (e.g. Ciena) don't block or throttle server requests. */
 const USER_AGENT =
   "Mozilla/5.0 (compatible; IR-AI-Readiness-Scanner/1.0; +https://github.com/ir-ai-readiness) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36";
@@ -289,7 +289,7 @@ function extractEarningsCandidates(html: string, baseOrigin: string): string[] {
     }
   });
   scored.sort((a, b) => (b.score !== a.score ? b.score - a.score : a.url.localeCompare(b.url)));
-  return scored.map((s) => s.url).slice(0, 22);
+  return scored.map((s) => s.url).slice(0, 28);
 }
 
 function shouldRetry(status: number): boolean {
