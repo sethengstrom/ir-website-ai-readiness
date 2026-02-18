@@ -353,7 +353,7 @@ function ResultsByCategory({
     <section className="rounded-xl border border-zinc-700/60 bg-zinc-900/40 overflow-hidden">
       <div className="sticky top-0 z-10 bg-[var(--background)] border-b border-zinc-700/60 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.3)]">
         {strip}
-        {stickyHeader && <div className="px-4 pb-3 flex flex-wrap items-center gap-3">{stickyHeader}</div>}
+        {stickyHeader && <div className="px-4 py-4 flex flex-wrap items-center gap-3">{stickyHeader}</div>}
       </div>
 
       <CategoryRows
