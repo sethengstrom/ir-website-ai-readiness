@@ -33,10 +33,20 @@ export default function MethodologyPage() {
         <section>
           <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Overview</h2>
           <p className="text-[var(--muted)] text-base leading-relaxed">
-            The scanner compares two domains for <strong className="text-[var(--foreground)]">investor relations (IR) AI readiness</strong>—how well a site can be discovered, parsed, and cited by AI assistants and answer engines. We fetch a limited set of pages per domain (no deep crawl), then run deterministic analyzers. All scores are 0–100.
+            The scanner compares two domains for <strong className="text-[var(--foreground)]">investor relations (IR) AI readiness</strong>—how well a site can be discovered, parsed, and cited by AI assistants and answer engines. We fetch a limited set of pages per domain (deep crawl: up to 3 IR pages and 14 earnings/events links), then run deterministic analyzers. All scores are 0–100.
           </p>
           <p className="text-[var(--muted)] text-base leading-relaxed mt-3">
             We do not execute JavaScript; we only see the same initial HTML that many LLMs and answer engines see when they fetch a URL (e.g. for citation or RAG). A lot of AI retrieval runs without a headless browser—so a site that relies entirely on client-rendered content will score poorly here, and that reflects how it would perform for those systems. The scanner therefore measures readiness for the common case where the AI sees only server-rendered content.
+          </p>
+        </section>
+
+        <section id="understanding-scores">
+          <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Understanding your scores</h2>
+          <p className="text-[var(--muted)] text-base leading-relaxed">
+            Scores are based on <strong className="text-[var(--foreground)]">server-rendered HTML only</strong>. We do not run a headless browser or execute JavaScript. When you look at your site in a normal browser, you see the full page after scripts run—including navigation and content that’s injected by React, Vue, or similar. We only see the initial HTML the server sends. Many AI systems and answer engines fetch pages the same way (no JavaScript), so our scores reflect what they would typically see.
+          </p>
+          <p className="text-[var(--muted)] text-base leading-relaxed mt-3">
+            If a score is lower than you expect—especially <strong className="text-[var(--foreground)]">IR checklist</strong>, which looks for links like “SEC Filings” or “Events” in the HTML—it often means we didn’t find those links in the initial response, not that your site is missing them. Client-rendered navigation is very common; the score is telling you how your site looks to systems that don’t run a browser. Use the breakdown and the links below to see exactly what we measured and how to improve for that world.
           </p>
         </section>
 
@@ -119,7 +129,7 @@ export default function MethodologyPage() {
           </p>
         </section>
 
-        <section>
+        <section id="limitations">
           <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Limitations</h2>
           <p className="text-[var(--muted)] text-base leading-relaxed">
             The scanner uses a shallow fetch and deterministic rules (regex, link patterns, heuristics). It does not use an LLM and does not execute JavaScript. We only see server-rendered HTML—so links or content that appear only after client-side rendering (e.g. in a React/Vue nav) may be reported as missing even when they exist on the live site. Results depend on the small set of URLs we fetch; if key content lives on paths we never request (e.g. a different earnings URL), we will report “Not answerable” or “Partial.” Scores are intended for comparison and improvement guidance, not as a guarantee of how any specific AI system will cite a site.

@@ -179,6 +179,22 @@ function CategoryRows({
                     : ` JSON-LD only: ${resultA.structuredDataBreakdown?.structuredDataScore ?? "—"} / ${resultB!.structuredDataBreakdown?.structuredDataScore ?? "—"}`}
                 </p>
               )}
+              {key === "irChecklist" && (
+                <p className="text-sm text-zinc-500 mt-0.5">
+                  We only count links present in the initial HTML. Navigation that appears after JavaScript runs is not counted.{" "}
+                  <Link href="/methodology#understanding-scores" className="text-emerald-400/90 hover:text-emerald-300 underline">
+                    Why might this be low?
+                  </Link>
+                </p>
+              )}
+              {key === "irChecklist" && (scoreA < 30 || (scoreB != null && scoreB < 30)) && (
+                <div className="mt-2 p-2.5 rounded-md bg-amber-950/30 border border-amber-800/50 text-sm text-amber-100/90">
+                  Low score? We don’t run JavaScript. If your IR links are in client-rendered navigation, we won’t see them—and many AI systems see your site the same way.{" "}
+                  <Link href="/methodology#understanding-scores" className="font-medium text-amber-300 hover:text-amber-200 underline">
+                    Understanding your scores
+                  </Link>
+                </div>
+              )}
               {hasCriteria && (
                 <div className="mt-2">
                   <button
@@ -728,6 +744,9 @@ function HomeContent() {
             <h2 className="font-semibold text-[var(--foreground)] mb-1">{AEO_INTRO.title}</h2>
             <p className="text-[var(--muted)] mb-2">{AEO_INTRO.body}</p>
             <p className="text-[var(--muted)] text-sm opacity-90">{AEO_INTRO.scoreMeaning}</p>
+            <p className="text-[var(--muted)] text-sm opacity-90 mt-2 pt-2 border-t border-[var(--card-border)]">
+              Scores are based on <strong className="text-[var(--foreground)]">server-rendered HTML only</strong> (we don’t run JavaScript). Many AI systems fetch pages the same way—so a low score can mean “not visible in initial HTML,” not “your site is missing content.”
+            </p>
           </div>
         </div>
       </header>
@@ -808,6 +827,9 @@ function HomeContent() {
             </div>
             <p className="text-sm text-zinc-500">
               A deep scan can take <strong className="text-zinc-400">1–4 minutes</strong> (two domains take longer). We fetch the homepage, robots.txt, sitemap, discover and fetch up to 3 IR pages, and up to 14 earnings/events/presentations links per domain, then analyze each site. Please don’t close this page.
+            </p>
+            <p className="text-sm text-zinc-500 mt-1">
+              Scores use <strong className="text-zinc-400">server-rendered HTML only</strong> (no JavaScript). Many AI systems fetch the same way.
             </p>
           </div>
         )}
