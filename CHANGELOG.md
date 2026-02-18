@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [0.3.0] - 2025-02-18
+
+### Changed
+
+- **Thorough crawl:** Scans are slower and more thorough. Per domain: up to **2** IR entry pages (when discovery yields multiple), up to **8** phase-2 earnings/events/presentations links (was 2), **20s** per-request timeout (was 12s), **120s** total scan timeout (was 60s). API `maxDuration` increased to 60s. More earnings candidates are considered (15 per page) so phase-2 has more URLs to choose from. Typical page count per domain is now up to ~12–14 HTML pages instead of 3–4.
+- **README and methodology** updated to describe the thorough crawl and new timeouts.
+
+---
+
 ## [0.2.0] - 2025-02-13
 
 ### Added
@@ -37,5 +46,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+[0.3.0]: https://github.com/ir-ai-readiness/ir-ai-readiness-scanner/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ir-ai-readiness/ir-ai-readiness-scanner/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ir-ai-readiness/ir-ai-readiness-scanner/releases/tag/v0.1.0

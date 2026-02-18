@@ -7,8 +7,8 @@
  * - Conventional guess (/investors for IR subdomains, else /investor).
  * Phase 1b: fetch the chosen IR URL (and if it fails, one fallback path). If sitemap wasn't at root, we try the first
  * Sitemap: from robots so discovery can use sitemap IR URLs when possible.
- * Phase 2: up to 2 earnings/events/presentations links from phase-1 HTML.
- * Max 6–7 requests per domain, 12s timeout each. Robustness and accuracy over speed.
+ * Phase 2: up to MAX_FOLLOWUP earnings/events/presentations links from phase-1 HTML.
+ * More thorough: longer per-request timeout, more IR pages when discovery yields multiple, more phase-2 follow-ups.
  */
 
 import * as cheerio from "cheerio";
@@ -122,11 +122,14 @@ function pickBestSitemapIRUrl(irUrls: string[], origin: string): string | null {
   return scored[0].url;
 }
 
-/** Per-request timeout; slow IR sites may need 12s to respond. */
-const FETCH_TIMEOUT_MS = 12000;
-/** Phase 1a: home, robots, sitemap only. IR URL is chosen by discovery then fetched separately. */
+/** Per-request timeout; allow slow IR sites more time to respond. */
+const FETCH_TIMEOUT_MS = 20000;
+/** Phase 1a: home, robots, sitemap only. IR URL(s) chosen by discovery then fetched separately. */
 const PHASE1A_COUNT = 3;
-const MAX_FOLLOWUP = 2;
+/** Max number of additional IR entry pages to fetch when discovery yields multiple (e.g. nav + sitemap). */
+const MAX_IR_PAGES = 2;
+/** Max earnings/events/presentations links to fetch in phase 2 (more thorough crawl). */
+const MAX_FOLLOWUP = 8;
 /** Browser-like UA so IR sites (e.g. Ciena) don't block or throttle server requests. */
 const USER_AGENT =
   "Mozilla/5.0 (compatible; IR-AI-Readiness-Scanner/1.0; +https://github.com/ir-ai-readiness) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36";
@@ -281,7 +284,7 @@ function extractEarningsCandidates(html: string, baseOrigin: string): string[] {
     }
   });
   scored.sort((a, b) => (b.score !== a.score ? b.score - a.score : a.url.localeCompare(b.url)));
-  return scored.map((s) => s.url).slice(0, 5);
+  return scored.map((s) => s.url).slice(0, 15);
 }
 
 function shouldRetry(status: number): boolean {
@@ -514,46 +517,42 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
     }
   }
 
-  // Discover IR entry URL: user path > homepage nav links > sitemap IR URLs > conventional guess.
+  // Discover IR entry URL(s): user path > homepage nav links > sitemap IR URLs > conventional guess. Fetch up to MAX_IR_PAGES.
   const homeUrl = `${base}/`;
   const homeHtml = htmlByUrl.get(homeUrl);
-  let fourthHtmlUrl: string;
+  const irUrlsToFetch: string[] = [];
   if (userPath !== null) {
-    fourthHtmlUrl = `${base}${userPath}`;
+    irUrlsToFetch.push(`${base}${userPath}`);
   } else {
     const fromNav = homeHtml ? extractIRLinksFromHtml(homeHtml, base) : [];
     const navFirst = fromNav[0];
     const sitemapFirst = pickBestSitemapIRUrl(sitemap.irUrls, base);
-    if (navFirst) {
-      fourthHtmlUrl = navFirst;
-    } else if (sitemapFirst) {
-      fourthHtmlUrl = sitemapFirst;
-    } else {
-      fourthHtmlUrl = isIRSubdomain(hostname) ? `${base}/investors` : `${base}/investor`;
-    }
+    const first = navFirst ?? sitemapFirst ?? (isIRSubdomain(hostname) ? `${base}/investors` : `${base}/investor`);
+    irUrlsToFetch.push(first);
+    if (fromNav[1] && fromNav[1] !== first && irUrlsToFetch.length < MAX_IR_PAGES) irUrlsToFetch.push(fromNav[1]);
   }
 
-  // Fetch the chosen IR URL if we don't already have it (e.g. nav pointed to / and we have homepage).
-  if (!htmlByUrl.has(fourthHtmlUrl)) {
+  for (const irUrl of irUrlsToFetch) {
+    if (htmlByUrl.has(irUrl)) continue;
     try {
-      const irRes = await fetchOne(fourthHtmlUrl, true);
+      const irRes = await fetchOne(irUrl, true);
       if (
         irRes.status === 200 &&
         irRes.body &&
         (irRes.contentType.includes("text/html") || irRes.contentType.includes("application/xhtml"))
       ) {
-        htmlByUrl.set(fourthHtmlUrl, irRes.body);
+        htmlByUrl.set(irUrl, irRes.body);
         pages.push({
-          url: fourthHtmlUrl,
+          url: irUrl,
           html: irRes.body,
           status: irRes.status,
           contentType: irRes.contentType,
           responseTimeMs: irRes.responseTimeMs,
           lastModified: irRes.lastModified ?? undefined,
         });
-        urlsFromCrawl.push(fourthHtmlUrl);
+        urlsFromCrawl.push(irUrl);
         try {
-          if (isLikelyIRPath(new URL(fourthHtmlUrl).pathname)) irUrlsFromCrawl.push(fourthHtmlUrl);
+          if (isLikelyIRPath(new URL(irUrl).pathname)) irUrlsFromCrawl.push(irUrl);
         } catch {
           // ignore
         }
@@ -563,15 +562,16 @@ export async function crawlDomain(domainInput: string): Promise<CrawlResult> {
     }
   }
 
-  // If the IR URL failed (404 or non-HTML) and we didn't use a user path, try one fallback path.
-  if (!htmlByUrl.has(fourthHtmlUrl) && userPath === null) {
+  // If the first IR URL failed and we didn't use a user path, try one fallback path.
+  const firstIrUrl = irUrlsToFetch[0];
+  if (firstIrUrl && !htmlByUrl.has(firstIrUrl) && userPath === null) {
     const fallbackPath =
-      fourthHtmlUrl.endsWith("/investors") || fourthHtmlUrl.endsWith("/investors/")
+      firstIrUrl.endsWith("/investors") || firstIrUrl.endsWith("/investors/")
         ? `${base}/investor`
-        : fourthHtmlUrl.endsWith("/investor") || fourthHtmlUrl.endsWith("/investor/")
+        : firstIrUrl.endsWith("/investor") || firstIrUrl.endsWith("/investor/")
           ? `${base}/investor-relations`
           : null;
-    if (fallbackPath && fallbackPath !== fourthHtmlUrl) {
+    if (fallbackPath && fallbackPath !== firstIrUrl) {
       try {
         const fallbackRes = await fetchOne(fallbackPath, true);
         if (

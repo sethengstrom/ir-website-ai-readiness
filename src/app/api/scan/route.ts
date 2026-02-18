@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-// Parallel fetches keep scan under ~6–8s; 15s allows buffer; global timeout 45s enforced in handler
-export const maxDuration = 15;
+// Thorough crawl: more requests and longer timeouts; allow up to 2 min for scan.
+export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from "next/server";
 import { SCAN_ERROR_CODES, messageForCode, isScanErrorCode } from "@/lib/scan-errors";
@@ -10,8 +10,8 @@ const CACHE_DAYS = 7;
 /** Set to true to return cached results for same domain pair within CACHE_DAYS. Disabled while scans are fast. */
 const USE_CACHE = false;
 
-/** Global scan timeout (60s) so slow IR sites have time to respond. */
-const SCAN_TIMEOUT_MS = 60_000;
+/** Global scan timeout so thorough crawl (more pages, slower sites) can complete. */
+const SCAN_TIMEOUT_MS = 120_000;
 
 /** Rate limit: max requests per IP per window. */
 const RATE_LIMIT_WINDOW_MS = 60_000;
