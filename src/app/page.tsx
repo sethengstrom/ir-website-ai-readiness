@@ -107,6 +107,9 @@ const CATEGORY_ITEMS = [
   { key: "irChecklist", label: "IR checklist" },
 ] as const;
 
+/** Only show the "Low score?" warning when IR checklist is strictly below this value. */
+const IR_CHECKLIST_LOW_THRESHOLD = 30;
+
 const PRESET_IR_SITES_A = [
   { name: "Alphabet", url: "https://abc.xyz/investor/" },
   { name: "Netflix", url: "https://ir.netflix.net" },
@@ -187,7 +190,7 @@ function CategoryRows({
                   </Link>
                 </p>
               )}
-              {key === "irChecklist" && (scoreA < 30 || (scoreB != null && scoreB < 30)) && (
+              {key === "irChecklist" && (scoreA < IR_CHECKLIST_LOW_THRESHOLD || (scoreB != null && scoreB < IR_CHECKLIST_LOW_THRESHOLD)) && (
                 <div className="mt-2 p-2.5 rounded-md bg-amber-950/30 border border-amber-800/50 text-sm text-amber-100/90">
                   Low score? We don’t run JavaScript. If your IR links are in client-rendered navigation, we won’t see them—and many AI systems see your site the same way.{" "}
                   <Link href="/methodology#understanding-scores" className="font-medium text-amber-300 hover:text-amber-200 underline">
