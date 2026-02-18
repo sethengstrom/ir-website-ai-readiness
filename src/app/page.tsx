@@ -807,7 +807,7 @@ function HomeContent() {
               />
             </div>
             <p className="text-sm text-zinc-500">
-              This usually takes <strong className="text-zinc-400">under 15 seconds</strong> (slow sites may take up to a minute). We fetch the homepage, robots.txt, sitemap, one IR page (your URL or /investor or /investors), and up to 2 earnings/events/presentations links per domain, then analyze each site. Please don’t close this page.
+              A deep scan can take <strong className="text-zinc-400">1–4 minutes</strong> (two domains take longer). We fetch the homepage, robots.txt, sitemap, discover and fetch up to 3 IR pages, and up to 14 earnings/events/presentations links per domain, then analyze each site. Please don’t close this page.
             </p>
           </div>
         )}
@@ -933,13 +933,11 @@ function HomeContent() {
           <p className="text-zinc-500 text-sm">
             {domainA.trim() ? (
               <>
-                Add an optional second domain to compare, or click <strong className="text-zinc-400">Scan</strong> to analyze one site. Each site is checked by fetching the homepage, IR paths, robots.txt, and sitemap, then analyzed for crawlability, structured data, parseability, freshness, and IR completeness.
+                Add an optional second domain to compare, or click <strong className="text-zinc-400">Scan</strong> to analyze one site. Each site is deeply crawled (homepage, robots, sitemap, discovered IR pages, and up to 14 earnings/events links), then analyzed for crawlability, structured data, parseability, freshness, and IR completeness.
               </>
             ) : (
               <>
-                Enter at least one domain and click Scan, or two to Compare. Each site is checked by fetching the homepage,
-                IR paths (/investor, /ir), robots.txt, and sitemap (no deep crawl), then analyzed for
-                crawlability, structured data, parseability, freshness, and IR completeness.
+                Enter at least one domain and click Scan, or two to Compare. Each site is deeply crawled (homepage, robots, sitemap, up to 3 IR pages from nav/sitemap, and up to 14 earnings/events links), then analyzed for crawlability, structured data, parseability, freshness, and IR completeness.
               </>
             )}
           </p>

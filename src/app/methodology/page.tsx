@@ -53,7 +53,7 @@ export default function MethodologyPage() {
         <section>
           <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Investor question coverage (12 questions)</h2>
           <p className="text-[var(--muted)] text-base leading-relaxed mb-3">
-            We test 12 common investor questions per domain. For each question we scan the fetched pages (homepage, one IR page (your URL or /investor or /investors), and up to 2 earnings/events/presentations links) and look for evidence: links, numbers, or text snippets. Each question is scored as:
+            We test 12 common investor questions per domain. For each question we scan the fetched pages (homepage, up to 3 IR pages from discovery or your URL, and up to 14 earnings/events/presentations links) and look for evidence: links, numbers, or text snippets. Each question is scored as:
           </p>
           <ul className="list-disc list-inside text-[var(--muted)] text-base space-y-1 ml-2 mb-3">
             <li><strong className="text-emerald-400">Answerable</strong> — Relevant page found, citable URL, and evidence snippet (and for revenue/EPS, a numeric extraction).</li>
@@ -126,6 +126,9 @@ export default function MethodologyPage() {
           </p>
           <p className="text-[var(--muted)] text-base leading-relaxed mt-3">
             <strong className="text-[var(--foreground)]">Why can IR checklist be 0 when those items are on the site?</strong> The checklist looks only at links (<code className="text-sm bg-[var(--card)] px-1 rounded">a href</code>) in the initial HTML we receive. Many IR sites serve a minimal HTML shell and build the whole nav with JavaScript. We then never see links like SEC Filings or Events—they appear only after the app runs in the browser. So 0 here means we did not find matching links in the HTML we got, not that the site has no IR content.
+          </p>
+          <p className="text-[var(--muted)] text-base leading-relaxed mt-3">
+            <strong className="text-[var(--foreground)]">Why might results differ between scans?</strong> Our logic is deterministic (same URLs, same ordering), but results can change because: (1) <strong>Blocking or rate limiting</strong>—some sites block or throttle automated requests (by IP, User-Agent, or request rate). We use a browser-like User-Agent, but WAFs (e.g. Cloudflare, Akamai) or bot protection may still return 403, 429, or an error page. A second scan soon after can then get fewer pages or different content. (2) <strong>Time-varying content</strong>—the site may serve different HTML (A/B tests, cache, or updated sitemap) so we discover or analyze different pages. (3) <strong>Transient failures</strong>—timeouts or network errors can mean one run gets a page and the next does not. So a lower score on a later scan often means the site or network responded differently, not that our scoring changed.
           </p>
         </section>
 
