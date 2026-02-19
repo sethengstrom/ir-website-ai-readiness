@@ -539,6 +539,11 @@ export async function crawlDomain(domainInput: string, options?: CrawlOptions): 
     const first = navFirst ?? sitemapFirst ?? (isIRSubdomain(hostname) ? `${base}/investors` : `${base}/investor`);
     irUrlsToFetch.push(first);
     if (fromNav[1] && fromNav[1] !== first && irUrlsToFetch.length < MAX_IR_PAGES) irUrlsToFetch.push(fromNav[1]);
+    // Common Q4 IR landing path; fetch so we can detect Q4 hosting (e.g. Costco has q4cdn here).
+    const overviewUrl = `${base}/overview/default.aspx`;
+    if (irUrlsToFetch.length < MAX_IR_PAGES && !irUrlsToFetch.some((u) => u === overviewUrl || u.replace(/\/$/, "") === overviewUrl.replace(/\/$/, ""))) {
+      irUrlsToFetch.push(overviewUrl);
+    }
   }
 
   onProgress?.("Fetching IR entry pages…");

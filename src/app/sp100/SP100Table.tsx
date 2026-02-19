@@ -150,7 +150,14 @@ export default function SP100Table({ rows }: { rows: SP100Row[] }) {
               <td className="px-3 py-2 text-zinc-400">{row.ticker}</td>
               <td className="px-3 py-2 text-zinc-300">
                 {row.domain ? (
-                  <span className="font-mono text-xs">{row.domain}</span>
+                  <a
+                    href={row.domain.startsWith("http") ? row.domain : `https://${row.domain}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-xs text-emerald-400 hover:text-emerald-300 underline"
+                  >
+                    {row.domain}
+                  </a>
                 ) : (
                   <span className="text-zinc-500">—</span>
                 )}
