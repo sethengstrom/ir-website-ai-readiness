@@ -300,7 +300,7 @@ function detectVendorsOnPage(
       notifiedNirSignal: !!notifiedNir,
     });
   }
-  if (notifiedNir && !notifiedSignal) {
+  if (notifiedNir && !notifiedStrongHost && !notifiedPathFingerprints && !notifiedWeakText) {
     matches.push({
       vendor: "Notified",
       onCore: core,
