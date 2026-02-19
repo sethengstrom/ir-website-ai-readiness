@@ -70,8 +70,8 @@ export type IrHostProvider =
 export type ToolsFeedsProvider = "Q4 Inc." | "Notified" | "Equisolve" | "Investis" | "Multiple";
 
 export interface IrHostingResult {
-  /** Primary IR site host. */
-  irHostProvider: IrHostProvider;
+  /** IR site host(s). Single vendor or multiple when several qualify, e.g. "Notified / Q4 Inc.". */
+  irHostProvider: string;
   /** Confidence of host detection. */
   confidence: "high" | "medium";
   /** Tools/feeds provider when host is Internal/Other and vendor fingerprints appear only on tools pages. */

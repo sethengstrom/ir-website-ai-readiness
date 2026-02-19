@@ -41,12 +41,15 @@ function formatRow(row: SP100Row): string {
 async function main() {
   const startIdx = parseInt(process.env.BATCH_START ?? "0", 10);
   const count = parseInt(process.env.BATCH_COUNT ?? "0", 10);
+  const irHostOnly = process.env.IR_HOST_ONLY === "1" || process.env.IR_HOST_ONLY === "true";
   const limit = count > 0 ? count : SP100_RESULTS.length;
   const rows = SP100_RESULTS.slice(startIdx, startIdx + limit);
   const total = rows.length;
   const totalInList = SP100_RESULTS.length;
 
-  console.log(`Batch: scanning ${total} domains (start=${startIdx}, count=${limit || "all"}). Delay ${DELAY_MS}ms between each.\n`);
+  console.log(
+    `Batch: scanning ${total} domains (start=${startIdx}, count=${limit || "all"}). Delay ${DELAY_MS}ms between each.${irHostOnly ? " [IR Host column only]" : ""}\n`
+  );
 
   const results: SP100Row[] = [...SP100_RESULTS];
   let done = 0;
@@ -69,16 +72,23 @@ async function main() {
       });
       const analyzed = analyzeDomain(crawlResult, { onProgress: () => {} });
 
-      results[idx] = {
-        ...row,
-        overallScore: analyzed.overallScore,
-        categoryScores: analyzed.categoryScores,
-        lastScanned: today,
-        irHostProvider: analyzed.irHosting?.irHostProvider ?? null,
-        toolsFeedsProvider: analyzed.irHosting?.toolsFeedsProvider ?? null,
-      };
+      results[idx] = irHostOnly
+        ? {
+            ...row,
+            lastScanned: today,
+            irHostProvider: analyzed.irHosting?.irHostProvider ?? null,
+            toolsFeedsProvider: analyzed.irHosting?.toolsFeedsProvider ?? null,
+          }
+        : {
+            ...row,
+            overallScore: analyzed.overallScore,
+            categoryScores: analyzed.categoryScores,
+            lastScanned: today,
+            irHostProvider: analyzed.irHosting?.irHostProvider ?? null,
+            toolsFeedsProvider: analyzed.irHosting?.toolsFeedsProvider ?? null,
+          };
       done++;
-      console.log(`OK overall=${analyzed.overallScore}`);
+      console.log(irHostOnly ? `OK irHost=${analyzed.irHosting?.irHostProvider ?? "—"}` : `OK overall=${analyzed.overallScore}`);
     } catch (e) {
       failed++;
       const msg = e instanceof Error ? e.message : String(e);

@@ -256,7 +256,7 @@ export function analyzeHostingProvider(
   };
 
   // Host: vendor on 2+ core pages OR "Powered by" on core OR 1+ core with strong platform signal (e.g. Q4 in page code)
-  let hostProvider: IrHostProvider = "Internal/Other";
+  let hostProvider: string = "Internal/Other";
   let confidence: "high" | "medium" = "medium";
   const hostCandidates: { vendor: VendorId; conf: "high" | "medium" }[] = [];
 
@@ -275,8 +275,9 @@ export function analyzeHostingProvider(
       if (a.conf !== b.conf) return a.conf === "high" ? -1 : 1;
       return HOST_PRIORITY.indexOf(a.vendor) - HOST_PRIORITY.indexOf(b.vendor);
     });
-    hostProvider = VENDOR_TO_HOST[hostCandidates[0].vendor];
-    confidence = hostCandidates[0].conf;
+    const names = [...new Set(hostCandidates.map((c) => VENDOR_TO_HOST[c.vendor]))];
+    hostProvider = names.join(" / ");
+    confidence = hostCandidates.some((c) => c.conf === "high") ? "high" : "medium";
   }
 
   // Fallback: known Q4-hosted IR domains that don't expose Q4 in server-rendered HTML (e.g. client-rendered)
