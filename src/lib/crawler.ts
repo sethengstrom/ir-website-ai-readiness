@@ -170,6 +170,9 @@ async function readTextWithLimit(res: Response, maxBytes: number): Promise<strin
 /** Match anchors/URLs for earnings-related targets (deterministic). Include events and presentations (common on IR sites). */
 const EARNINGS_LINK_PATTERN = /earnings|results|quarterly|q1|q2|q3|q4|fy\d|press-release|release|webcast|replay|transcript|prepared-remarks|financials|quarter|events|presentations/i;
 
+/** Per-page fetch outcome for diagnostics and fallbacks. */
+export type FetchQuality = "OK" | "JS-shell" | "blocked";
+
 export interface CrawlPage {
   url: string;
   html: string;
@@ -179,6 +182,10 @@ export interface CrawlPage {
   responseTimeMs?: number;
   /** Last-Modified header value (optional). */
   lastModified?: string;
+  /** Fetch outcome: OK, JS-shell (SPA shell with little server-rendered content), or blocked. */
+  fetchQuality?: FetchQuality;
+  /** Final URL after redirects (when available). */
+  finalUrl?: string;
 }
 
 export interface CrawlResult {
@@ -188,6 +195,8 @@ export interface CrawlResult {
   pages: CrawlPage[];
   urlsFromCrawl: string[];
   irUrlsFromCrawl: string[];
+  /** Final URL of the first HTML page after redirects (when available). */
+  firstPageFinalUrl?: string;
 }
 
 /** Optional progress callback for UI updates during crawl. */
@@ -296,6 +305,18 @@ function shouldRetry(status: number): boolean {
   return status === 0 || (status >= 500 && status <= 599);
 }
 
+/** Classify fetch outcome for diagnostics and fallbacks. */
+function getFetchQuality(status: number, body: string): FetchQuality {
+  if (status === 0 || status === 403 || status === 502 || status === 503) return "blocked";
+  if (status !== 200 || !body) return "blocked";
+  const $ = cheerio.load(body);
+  const bodyText = $("body").text()?.replace(/\s+/g, " ").trim() || "";
+  const scriptLen = ($("script").text() || "").length;
+  if (bodyText.length < 400 && body.length > 2000) return "JS-shell";
+  if (bodyText.length < 300 && scriptLen > 1000) return "JS-shell";
+  return "OK";
+}
+
 async function fetchOne(
   url: string,
   acceptHtmlOnly: boolean
@@ -305,6 +326,7 @@ async function fetchOne(
   body: string;
   responseTimeMs: number;
   lastModified: string | null;
+  finalUrl: string;
 }> {
   let lastResult: {
     status: number;
@@ -312,12 +334,14 @@ async function fetchOne(
     body: string;
     responseTimeMs: number;
     lastModified: string | null;
+    finalUrl: string;
   } = {
     status: 0,
     contentType: "",
     body: "",
     responseTimeMs: 0,
     lastModified: null,
+    finalUrl: url,
   };
 
   for (let attempt = 0; attempt <= RETRY_MAX; attempt++) {
@@ -339,6 +363,7 @@ async function fetchOne(
       const contentType = res.headers.get("content-type") || "";
       const lastModified = res.headers.get("last-modified");
       const body = await readTextWithLimit(res, MAX_BODY_BYTES);
+      const finalUrl = res.url || url;
       clearTimeout(timeoutId);
       lastResult = {
         status: res.status,
@@ -346,6 +371,7 @@ async function fetchOne(
         body: res.ok ? body : "",
         responseTimeMs,
         lastModified,
+        finalUrl,
       };
       if (!shouldRetry(res.status)) return lastResult;
     } catch {
@@ -356,6 +382,7 @@ async function fetchOne(
         body: "",
         responseTimeMs: Date.now() - start,
         lastModified: null,
+        finalUrl: url,
       };
     }
   }
@@ -445,7 +472,7 @@ export async function crawlDomain(domainInput: string, options?: CrawlOptions): 
     )
   );
   const phase1aResults = phase1aSettled.map((p) =>
-    p.status === "fulfilled" ? p.value : { url: "", acceptHtmlOnly: false, status: 0, contentType: "", body: "", responseTimeMs: 0, lastModified: null }
+    p.status === "fulfilled" ? p.value : { url: "", acceptHtmlOnly: false, status: 0, contentType: "", body: "", responseTimeMs: 0, lastModified: null, finalUrl: "" }
   );
   phase1aUrls.forEach((u, i) => {
     if (phase1aSettled[i].status === "fulfilled") return;
@@ -453,7 +480,7 @@ export async function crawlDomain(domainInput: string, options?: CrawlOptions): 
     (phase1aResults[i] as { url: string; acceptHtmlOnly: boolean }).acceptHtmlOnly = u.acceptHtmlOnly;
   });
 
-  for (const { url, acceptHtmlOnly, status, contentType, body, responseTimeMs, lastModified } of phase1aResults) {
+  for (const { url, acceptHtmlOnly, status, contentType, body, responseTimeMs, lastModified, finalUrl } of phase1aResults) {
     if (!url) continue;
     if (url.endsWith("/robots.txt")) {
       if (status === 200 && body) {
@@ -493,6 +520,8 @@ export async function crawlDomain(domainInput: string, options?: CrawlOptions): 
         contentType,
         responseTimeMs,
         lastModified: lastModified ?? undefined,
+        fetchQuality: getFetchQuality(status, body),
+        finalUrl: finalUrl || undefined,
       });
       urlsFromCrawl.push(url);
       try {
@@ -564,6 +593,8 @@ export async function crawlDomain(domainInput: string, options?: CrawlOptions): 
           contentType: irRes.contentType,
           responseTimeMs: irRes.responseTimeMs,
           lastModified: irRes.lastModified ?? undefined,
+          fetchQuality: getFetchQuality(irRes.status, irRes.body),
+          finalUrl: irRes.finalUrl || undefined,
         });
         urlsFromCrawl.push(irUrl);
         try {
@@ -602,6 +633,8 @@ export async function crawlDomain(domainInput: string, options?: CrawlOptions): 
             contentType: fallbackRes.contentType,
             responseTimeMs: fallbackRes.responseTimeMs,
             lastModified: fallbackRes.lastModified ?? undefined,
+            fetchQuality: getFetchQuality(fallbackRes.status, fallbackRes.body),
+            finalUrl: fallbackRes.finalUrl || undefined,
           });
           urlsFromCrawl.push(fallbackPath);
           try {
@@ -647,6 +680,8 @@ export async function crawlDomain(domainInput: string, options?: CrawlOptions): 
             contentType: r.contentType,
             responseTimeMs: r.responseTimeMs,
             lastModified: r.lastModified ?? undefined,
+            fetchQuality: getFetchQuality(r.status, r.body),
+            finalUrl: r.finalUrl || undefined,
           });
           urlsFromCrawl.push(url);
           try {
@@ -669,6 +704,7 @@ export async function crawlDomain(domainInput: string, options?: CrawlOptions): 
     pages,
     urlsFromCrawl,
     irUrlsFromCrawl,
+    firstPageFinalUrl: pages[0]?.finalUrl ?? pages[0]?.url,
   };
   } catch (e) {
     console.error("[crawler] crawlDomain error for", base, e);

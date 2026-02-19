@@ -333,10 +333,16 @@ function ResultsByCategory({
               IR host: {resultA.irHosting.irHostProvider}
               {resultA.irHosting.toolsFeedsProvider && ` · Tools: ${resultA.irHosting.toolsFeedsProvider}`}
               {" "}({resultA.irHosting.confidence})
-              {(resultA.irHosting.debugDecisiveSignal ?? resultA.irHosting.debugSourcePage) && (
+              {(resultA.irHosting.debugDecisiveSignal ?? resultA.irHosting.debugSourcePage ?? resultA.irHosting.debugHostReason) && (
                 <span className="block text-zinc-600 mt-0.5" title={resultA.irHosting.debugSourcePage}>
                   {resultA.irHosting.debugDecisiveSignal}
                   {resultA.irHosting.debugSourcePage && ` · ${resultA.irHosting.debugSourcePage}`}
+                  {resultA.irHosting.debugHostReason && ` · ${resultA.irHosting.debugHostReason}`}
+                </span>
+              )}
+              {resultA.irHosting.debugVendorScores && Object.keys(resultA.irHosting.debugVendorScores).length > 0 && (
+                <span className="block text-zinc-600 text-[10px] mt-0.5">
+                  {Object.entries(resultA.irHosting.debugVendorScores).map(([k, v]) => `${k}: ${v}`).join(" · ")}
                 </span>
               )}
             </span>
@@ -389,10 +395,16 @@ function ResultsByCategory({
                 IR host: {resultB!.irHosting.irHostProvider}
                 {resultB!.irHosting.toolsFeedsProvider && ` · Tools: ${resultB!.irHosting.toolsFeedsProvider}`}
                 {" "}({resultB!.irHosting.confidence})
-                {(resultB!.irHosting.debugDecisiveSignal ?? resultB!.irHosting.debugSourcePage) && (
+                {(resultB!.irHosting.debugDecisiveSignal ?? resultB!.irHosting.debugSourcePage ?? resultB!.irHosting.debugHostReason) && (
                   <span className="block text-zinc-600 mt-0.5" title={resultB!.irHosting.debugSourcePage}>
                     {resultB!.irHosting.debugDecisiveSignal}
                     {resultB!.irHosting.debugSourcePage && ` · ${resultB!.irHosting.debugSourcePage}`}
+                    {resultB!.irHosting.debugHostReason && ` · ${resultB!.irHosting.debugHostReason}`}
+                  </span>
+                )}
+                {resultB!.irHosting.debugVendorScores && Object.keys(resultB!.irHosting.debugVendorScores).length > 0 && (
+                  <span className="block text-zinc-600 text-[10px] mt-0.5">
+                    {Object.entries(resultB!.irHosting.debugVendorScores).map(([k, v]) => `${k}: ${v}`).join(" · ")}
                   </span>
                 )}
               </span>

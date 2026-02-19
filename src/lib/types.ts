@@ -84,6 +84,10 @@ export interface IrHostingResult {
   debugDecisiveSignal?: string;
   /** Debug: URL or "index" for the page where the decisive signal was found. */
   debugSourcePage?: string;
+  /** Debug: human-readable reason for host decision (e.g. "Q4 strong signal on index"). */
+  debugHostReason?: string;
+  /** Debug: per-vendor scores (0–100) for diagnosing misses. */
+  debugVendorScores?: Record<string, number>;
 }
 
 export interface DomainResult {

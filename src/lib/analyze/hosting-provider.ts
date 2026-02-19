@@ -8,17 +8,19 @@ import * as cheerio from "cheerio";
 import type { CrawlPage } from "../crawler";
 import type { IrHostingResult, IrHostProvider, ToolsFeedsProvider } from "../types";
 import { isLikelyIRPath } from "../url-utils";
+import { detectVendorFromDns } from "../dns-vendor-detection";
 
 const CORE_PATH = /overview|about|news|press|events|presentations?|financials?/i;
 const TOOLS_PATH = /stock|quote|chart|sec|filings?|reports?/i;
 
-/** Core-eligible: index page (0) or same-origin URL with IR-like path. */
+/** Core-eligible: index page (0) or same-origin IR page, unless clearly tools-only (stock/quote/sec path). */
 function isCorePage(url: string, index: number, baseOrigin: string): boolean {
   if (index === 0) return true;
   try {
     const u = new URL(url);
     const baseOriginNormalized = new URL(baseOrigin.startsWith("http") ? baseOrigin : "https://" + baseOrigin).origin;
     if (u.origin !== baseOriginNormalized) return false;
+    if (isToolsPage(url)) return false;
     return isLikelyIRPath(u.pathname) || CORE_PATH.test(u.pathname);
   } catch {
     return false;
@@ -40,18 +42,25 @@ function getPageText(html: string): string {
   return body.replace(/\s+/g, " ").trim();
 }
 
-/** Footer text from <footer> or footer-equivalent containers (id/class/role). */
+/** Footer text from <footer> or footer-equivalent containers (role=contentinfo, #footer, .footer, .site-footer, etc.). */
 function getFooterEquivalentText(html: string): string {
   const $ = cheerio.load(html);
   const parts: string[] = [];
-  $("footer").each((_, el) => {
-    const t = $(el).text()?.trim();
-    if (t) parts.push(t);
-  });
-  $("[id*='footer'], [class*='footer'], [role='contentinfo']").each((_, el) => {
-    const t = $(el).text()?.trim();
-    if (t && t.length > 0 && t.length < 5000) parts.push(t);
-  });
+  const footerSelectors = [
+    "footer",
+    "[role='contentinfo']",
+    "#footer",
+    ".footer",
+    ".site-footer",
+    "[id*='footer']",
+    "[class*='footer']",
+  ];
+  for (const sel of footerSelectors) {
+    $(sel).each((_, el) => {
+      const t = $(el).text()?.trim();
+      if (t && t.length > 0 && t.length < 5000) parts.push(t);
+    });
+  }
   if (parts.length > 0) return parts.join(" ").replace(/\s+/g, " ").trim();
   const body = $("body").text() || "";
   return body.length > 2500 ? body.slice(-2500).replace(/\s+/g, " ").trim() : body.replace(/\s+/g, " ").trim();
@@ -192,22 +201,48 @@ function detectVendorsOnPage(
     });
   }
 
-  // Notified (IR platform and tools only; do not use events/webcasts—often different vendors)
-  const notifiedText = /Data provided by Refinitiv/i.test(text) || /Data provided by Kaleidoscope/i.test(text);
-  const notifiedHost = hostMatches([
+  // Notified: strong infrastructure (hosts + URL/path fingerprints) and weak text (Refinitiv/Kaleidoscope)
+  const NOTIFIED_STRONG_HOSTS = [
     "shareholder.com",
+    "gcs-web.com",
+    "stockpr.com",
+    "ir.stockpr.com",
     "notified.com",
     "intrado.com",
     "west.com",
-    "gcs-web.com", // Notified IR platform (e.g. Hershey's: hershey.gcs-web.com)
+  ];
+  const notifiedStrongHost = hostMatches(NOTIFIED_STRONG_HOSTS);
+  const notifiedPathFingerprints = pageHtmlContains(page.html, [
+    "phoenix.zhtml",
+    "secfiling.cfm",
+    "news-releases.cfm",
+    "eventdetail.cfm",
+    "External.File?item=",
   ]);
-  if (notifiedText || notifiedHost) {
+  const notifiedWeakText = /Data provided by Refinitiv/i.test(text) || /Data provided by Kaleidoscope/i.test(text);
+  const notifiedStrong = notifiedStrongHost || notifiedPathFingerprints;
+  const notifiedSignal = notifiedStrong || notifiedWeakText;
+  if (notifiedSignal) {
+    const coreForNotified = core || (() => {
+      try {
+        const path = new URL(page.url).pathname.toLowerCase();
+        return /news|releases|filings|events|event|sec/.test(path);
+      } catch {
+        return false;
+      }
+    })();
     matches.push({
       vendor: "Notified",
-      onCore: core && (notifiedText || notifiedHost),
-      onTools: tools && (notifiedText || notifiedHost),
+      onCore: coreForNotified && notifiedSignal,
+      onTools: tools && notifiedSignal,
       poweredByOnCore: false,
-      confidence: notifiedText || notifiedHost ? "high" : "medium",
+      confidence: notifiedStrong ? "high" : "medium",
+      strongPlatformSignal: notifiedStrong,
+      decisiveSignalLabel: notifiedPathFingerprints
+        ? "Notified path fingerprint"
+        : notifiedStrongHost
+          ? "Notified host"
+          : "Refinitiv/Kaleidoscope text",
     });
   }
 
@@ -263,10 +298,18 @@ const VENDOR_TO_TOOLS: Record<VendorId, ToolsFeedsProvider> = {
 /** Tie-break when multiple vendors match: prefer Equisolve over Q4 when both appear (Equisolve CDN = full IR platform; Q4 may be embedded widget only, e.g. Lyft). */
 const HOST_PRIORITY: VendorId[] = ["Equisolve", "Q4", "Notified", "Investis"];
 
-export function analyzeHostingProvider(
+export interface HostingProviderOptions {
+  /** Final URL of first page after redirects (for DNS fallback). */
+  firstPageFinalUrl?: string;
+  /** Fetch quality of first page; when poor, DNS/CNAME detection is used. */
+  firstPageFetchQuality?: "OK" | "JS-shell" | "blocked";
+}
+
+export async function analyzeHostingProvider(
   pages: CrawlPage[],
-  origin: string
-): IrHostingResult {
+  origin: string,
+  options?: HostingProviderOptions
+): Promise<IrHostingResult> {
   const baseOrigin = origin.replace(/\/$/, "") + "/";
   type VendorData = {
     coreCount: number;
@@ -275,7 +318,11 @@ export function analyzeHostingProvider(
     sawOnIndexPage: boolean;
     poweredByOnCore: boolean;
     strongPlatformSignalOnCore: boolean;
+    /** Strong signal on any non-tools-only page (index or core), so Q4 can qualify with 0-1 core. */
+    strongPlatformSignalOnNonToolsOnlyPage: boolean;
     maxConfidence: "high" | "medium";
+    /** Weighted score 0–100 for debug (strong signals high, weak low). */
+    score: number;
     exampleDecisiveSignal?: string;
     exampleSourcePage?: string;
   };
@@ -284,6 +331,7 @@ export function analyzeHostingProvider(
   for (let i = 0; i < pages.length; i++) {
     const page = pages[i];
     const pageMatches = detectVendorsOnPage(page, i, baseOrigin);
+    const nonToolsOnlyPage = i === 0 || isCorePage(page.url, i, baseOrigin);
     for (const m of pageMatches) {
       const cur = byVendor.get(m.vendor);
       const coreCount = (cur?.coreCount ?? 0) + (m.onCore ? 1 : 0);
@@ -292,8 +340,11 @@ export function analyzeHostingProvider(
       const sawOnIndexPage = (cur?.sawOnIndexPage ?? false) || (i === 0);
       const poweredByOnCore = (cur?.poweredByOnCore ?? false) || m.poweredByOnCore;
       const strongPlatformSignalOnCore = (cur?.strongPlatformSignalOnCore ?? false) || (m.onCore && !!m.strongPlatformSignal);
+      const strongPlatformSignalOnNonToolsOnlyPage = (cur?.strongPlatformSignalOnNonToolsOnlyPage ?? false) || (!!m.strongPlatformSignal && nonToolsOnlyPage);
       const maxConfidence = cur?.maxConfidence === "high" || m.confidence === "high" ? "high" : "medium";
-      const contributesToQualify = m.poweredByOnCore || (m.onCore && !!m.strongPlatformSignal) || m.onCore;
+      const scoreDelta = m.onCore || m.onTools ? (m.strongPlatformSignal ? 35 : 10) : 0;
+      const score = Math.min(100, (cur?.score ?? 0) + scoreDelta);
+      const contributesToQualify = m.poweredByOnCore || (m.onCore && !!m.strongPlatformSignal) || m.onCore || (!!m.strongPlatformSignal && nonToolsOnlyPage);
       const label = m.decisiveSignalLabel ?? (m.onCore || m.poweredByOnCore ? VENDOR_TO_HOST[m.vendor] : undefined);
       const exampleDecisiveSignal = cur?.exampleDecisiveSignal ?? (contributesToQualify && label ? label : undefined);
       const exampleSourcePage = cur?.exampleSourcePage ?? (contributesToQualify ? (i === 0 ? "index" : page.url) : undefined);
@@ -304,36 +355,55 @@ export function analyzeHostingProvider(
         sawOnIndexPage,
         poweredByOnCore,
         strongPlatformSignalOnCore,
+        strongPlatformSignalOnNonToolsOnlyPage,
         maxConfidence,
+        score,
         exampleDecisiveSignal: exampleDecisiveSignal || cur?.exampleDecisiveSignal,
         exampleSourcePage: exampleSourcePage || cur?.exampleSourcePage,
       });
     }
   }
 
-  /** Q4 is not tools-only if it was seen on the index page. */
+  /** Q4/Notified are not tools-only if seen on the index page. */
   const toolsOnly = (v: VendorId): boolean => {
     const data = byVendor.get(v);
     if (!data || !data.sawOnTools || data.sawOnCore) return false;
-    if (v === "Q4" && data.sawOnIndexPage) return false;
+    if ((v === "Q4" || v === "Notified") && data.sawOnIndexPage) return false;
     return true;
   };
 
-  // Host: vendor on 2+ core pages OR "Powered by" on core OR 1+ core page with strong platform signal (Q4 qualifies with single core + strong)
+  // Host: 2+ core OR powered-by on core OR 1+ core with strong signal; Q4 also qualifies if strong signal on any non-tools-only page (0-1 core)
   let hostProvider: string = "Internal/Other";
   let confidence: "high" | "medium" = "medium";
   let debugDecisiveSignal: string | undefined;
   let debugSourcePage: string | undefined;
+  let debugHostReason: string | undefined;
   const hostCandidates: { vendor: VendorId; conf: "high" | "medium"; data: VendorData }[] = [];
 
   for (const v of HOST_PRIORITY) {
     const data = byVendor.get(v);
     if (!data) continue;
     if (toolsOnly(v)) continue;
-    const qualifies = data.coreCount >= 2 || data.poweredByOnCore || (data.coreCount >= 1 && data.strongPlatformSignalOnCore);
+    const qualifies =
+      data.coreCount >= 2 ||
+      data.poweredByOnCore ||
+      (data.coreCount >= 1 && data.strongPlatformSignalOnCore) ||
+      (v === "Q4" && data.strongPlatformSignalOnNonToolsOnlyPage) ||
+      (v === "Notified" && data.strongPlatformSignalOnCore);
     if (qualifies) {
       hostCandidates.push({ vendor: v, conf: data.maxConfidence, data });
     }
+  }
+
+  const debugVendorScores: Record<string, number> = {};
+  for (const v of HOST_PRIORITY) {
+    const d = byVendor.get(v);
+    if (d && d.score > 0) debugVendorScores[VENDOR_TO_HOST[v]] = Math.min(100, d.score);
+  }
+  if (hostCandidates.length === 0 && Object.keys(debugVendorScores).length > 0) {
+    debugHostReason = "no qualifying vendor (scores present but did not meet core/strong threshold)";
+  } else if (hostCandidates.length === 0) {
+    debugHostReason = "no vendor signals found";
   }
 
   if (hostCandidates.length > 0) {
@@ -347,6 +417,39 @@ export function analyzeHostingProvider(
     const first = hostCandidates[0];
     debugDecisiveSignal = first.data.exampleDecisiveSignal;
     debugSourcePage = first.data.exampleSourcePage;
+    debugHostReason =
+      first.data.poweredByOnCore
+        ? "powered-by on core"
+        : first.data.strongPlatformSignalOnNonToolsOnlyPage
+          ? "strong signal on non-tools-only page"
+          : first.data.coreCount >= 2
+            ? "2+ core pages"
+            : "1 core + strong signal";
+  }
+
+  // Fallback when fetch quality is poor: DNS/CNAME-based vendor detection
+  if (hostProvider === "Internal/Other" && options?.firstPageFetchQuality && options.firstPageFetchQuality !== "OK") {
+    let hostname: string;
+    try {
+      const urlToUse = options.firstPageFinalUrl && options.firstPageFinalUrl.startsWith("http") ? options.firstPageFinalUrl : origin;
+      hostname = new URL(urlToUse).hostname;
+    } catch {
+      hostname = "";
+    }
+    if (hostname) {
+      try {
+        const dnsVendor = await detectVendorFromDns(hostname);
+        if (dnsVendor) {
+          hostProvider = dnsVendor.vendor === "Q4" ? "Q4 Inc." : "Notified";
+          confidence = "medium";
+          debugDecisiveSignal = `DNS/CNAME: ${dnsVendor.matched}`;
+          debugSourcePage = "origin";
+          debugHostReason = "DNS/CNAME fallback (poor fetch)";
+        }
+      } catch {
+        // ignore DNS errors
+      }
+    }
   }
 
   // Fallback: known Q4-hosted IR domains that don't expose Q4 in server-rendered HTML (e.g. client-rendered)
@@ -388,5 +491,7 @@ export function analyzeHostingProvider(
     debugConfidence: confidence,
     ...(debugDecisiveSignal != null && { debugDecisiveSignal }),
     ...(debugSourcePage != null && { debugSourcePage }),
+    ...(debugHostReason != null && { debugHostReason }),
+    ...(Object.keys(debugVendorScores).length > 0 && { debugVendorScores }),
   };
 }

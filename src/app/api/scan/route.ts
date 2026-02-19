@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
 
           sendProgress("Analyzing Domain A (crawlability, structure, content)…", 72);
           let analyzeProgress = 74;
-          const resultA = analyzeDomain(crawlResultA, {
+          const resultA = await analyzeDomain(crawlResultA, {
             onProgress: (msg) => {
               analyzeProgress = Math.min(88, analyzeProgress + 3);
               sendProgress(msg, analyzeProgress);
@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
           if (crawlResultB != null) {
             sendProgress("Analyzing Domain B…", 90);
             analyzeProgress = 92;
-            resultB = analyzeDomain(crawlResultB, {
+            resultB = await analyzeDomain(crawlResultB, {
               onProgress: (msg) => {
                 analyzeProgress = Math.min(97, analyzeProgress + 2);
                 sendProgress(msg, analyzeProgress);

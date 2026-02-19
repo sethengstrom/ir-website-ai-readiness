@@ -29,9 +29,18 @@ const UNAVAILABLE_STRUCTURED_BREAKDOWN: StructuredDataBreakdown = {
   ],
 };
 
-function runAnalyzer<T>(name: string, fn: () => T, fallback: T): T {
+function runAnalyzerSync<T>(name: string, fn: () => T, fallback: T): T {
   try {
     return fn();
+  } catch (e) {
+    console.error(`[analyze] ${name} failed:`, e);
+    return fallback;
+  }
+}
+
+async function runAnalyzerAsync<T>(name: string, fn: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await fn();
   } catch (e) {
     console.error(`[analyze] ${name} failed:`, e);
     return fallback;
@@ -42,7 +51,7 @@ export interface AnalyzeOptions {
   onProgress?: (message: string) => void;
 }
 
-export function analyzeDomain(result: CrawlResult, options?: AnalyzeOptions): DomainResult {
+export async function analyzeDomain(result: CrawlResult, options?: AnalyzeOptions): Promise<DomainResult> {
   const onProgress = options?.onProgress;
   onProgress?.("Extracting structured data from pages…");
   const pagesWithFacts = result.pages.map((p) => ({
@@ -51,42 +60,47 @@ export function analyzeDomain(result: CrawlResult, options?: AnalyzeOptions): Do
   }));
 
   onProgress?.("Analyzing crawlability (robots, sitemap, IR URLs)…");
-  const crawlability = runAnalyzer(
+  const crawlability = runAnalyzerSync(
     "crawlability",
     () => analyzeCrawlability(result),
     { score: DEFAULT_CATEGORY_SCORE, findings: EMPTY_FINDINGS }
   );
   onProgress?.("Analyzing structured data & JSON-LD…");
-  const structuredData = runAnalyzer(
+  const structuredData = runAnalyzerSync(
     "structuredData",
     () => analyzeStructuredData(pagesWithFacts, result.origin),
     { score: DEFAULT_CATEGORY_SCORE, findings: EMPTY_FINDINGS, breakdown: UNAVAILABLE_STRUCTURED_BREAKDOWN }
   );
   onProgress?.("Analyzing parseability (content, headings, canonical)…");
-  const parseability = runAnalyzer(
+  const parseability = runAnalyzerSync(
     "parseability",
     () => analyzeParseability(result.pages),
     { score: DEFAULT_CATEGORY_SCORE, findings: EMPTY_FINDINGS }
   );
   onProgress?.("Analyzing freshness & earnings hub…");
-  const freshness = runAnalyzer(
+  const freshness = runAnalyzerSync(
     "freshness",
     () => analyzeFreshness(pagesWithFacts),
     { score: DEFAULT_CATEGORY_SCORE, findings: EMPTY_FINDINGS }
   );
   onProgress?.("Checking IR checklist (filings, events, contact)…");
-  const irChecklist = runAnalyzer(
+  const irChecklist = runAnalyzerSync(
     "irChecklist",
     () => analyzeIRChecklist(result.pages),
     { score: DEFAULT_CATEGORY_SCORE, findings: EMPTY_FINDINGS }
   );
   onProgress?.("Detecting IR hosting provider…");
-  const irHosting = runAnalyzer(
+  const firstPage = result.pages[0];
+  const irHosting = await runAnalyzerAsync(
     "irHosting",
-    () => analyzeHostingProvider(result.pages, result.origin),
+    () =>
+      analyzeHostingProvider(result.pages, result.origin, {
+        firstPageFinalUrl: result.firstPageFinalUrl,
+        firstPageFetchQuality: firstPage?.fetchQuality,
+      }),
     { irHostProvider: "Internal/Other" as const, confidence: "medium" as const }
   );
-  const responseMetrics = runAnalyzer(
+  const responseMetrics = runAnalyzerSync(
     "responseMetrics",
     () => analyzeResponseMetrics(result.pages),
     { findings: EMPTY_FINDINGS }
@@ -110,7 +124,7 @@ export function analyzeDomain(result: CrawlResult, options?: AnalyzeOptions): Do
   ];
 
   onProgress?.("Evaluating investor question coverage…");
-  const investorQuestionCoverage = runAnalyzer(
+  const investorQuestionCoverage = runAnalyzerSync(
     "investorQuestionCoverage",
     () => analyzeInvestorQuestionCoverage(pagesWithFacts),
     getUnavailableInvestorCoverage()
@@ -144,10 +158,10 @@ export function analyzeDomain(result: CrawlResult, options?: AnalyzeOptions): Do
       structuredData.score * 0.1
   );
 
-  const firstPage = result.pages[0];
+  const firstPageForFavicon = result.pages[0];
   const faviconUrl =
-    firstPage?.html != null
-      ? extractFaviconUrl(firstPage.html, result.origin)
+    firstPageForFavicon?.html != null
+      ? extractFaviconUrl(firstPageForFavicon.html, result.origin)
       : `${result.origin.replace(/\/$/, "")}/favicon.ico`;
 
   return {

@@ -70,7 +70,7 @@ async function main() {
       const crawlResult = await crawlDomain(url, {
         onProgress: (msg) => { /* quiet */ },
       });
-      const analyzed = analyzeDomain(crawlResult, { onProgress: () => {} });
+      const analyzed = await analyzeDomain(crawlResult, { onProgress: () => {} });
 
       results[idx] = irHostOnly
         ? {
