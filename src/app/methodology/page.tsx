@@ -146,6 +146,9 @@ export default function MethodologyPage() {
           <Link href="/" className="text-[var(--accent)] hover:opacity-90 text-sm">
             ← Back to scanner
           </Link>
+          <Link href="/sp100" className="text-[var(--muted)] hover:text-[var(--foreground)] text-sm">
+            S&P 100 results
+          </Link>
           <Link href="/changelog" className="text-[var(--muted)] hover:text-[var(--foreground)] text-sm" title="Changelog">
             v{APP_VERSION}
           </Link>

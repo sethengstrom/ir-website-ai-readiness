@@ -998,6 +998,12 @@ function HomeContent() {
               Scoring methodology
             </Link>
             <Link
+              href="/sp100"
+              className="text-sm text-[var(--muted)] hover:text-[var(--foreground)] underline focus:outline-none focus:ring-2 focus:ring-emerald-500/50 rounded"
+            >
+              S&P 100 results
+            </Link>
+            <Link
               href="/changelog"
               className="text-sm text-[var(--muted)] hover:text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50 rounded"
               title="Changelog"
