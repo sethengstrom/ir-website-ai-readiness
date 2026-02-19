@@ -333,6 +333,12 @@ function ResultsByCategory({
               IR host: {resultA.irHosting.irHostProvider}
               {resultA.irHosting.toolsFeedsProvider && ` · Tools: ${resultA.irHosting.toolsFeedsProvider}`}
               {" "}({resultA.irHosting.confidence})
+              {(resultA.irHosting.debugDecisiveSignal ?? resultA.irHosting.debugSourcePage) && (
+                <span className="block text-zinc-600 mt-0.5" title={resultA.irHosting.debugSourcePage}>
+                  {resultA.irHosting.debugDecisiveSignal}
+                  {resultA.irHosting.debugSourcePage && ` · ${resultA.irHosting.debugSourcePage}`}
+                </span>
+              )}
             </span>
           )}
         </div>
@@ -383,6 +389,12 @@ function ResultsByCategory({
                 IR host: {resultB!.irHosting.irHostProvider}
                 {resultB!.irHosting.toolsFeedsProvider && ` · Tools: ${resultB!.irHosting.toolsFeedsProvider}`}
                 {" "}({resultB!.irHosting.confidence})
+                {(resultB!.irHosting.debugDecisiveSignal ?? resultB!.irHosting.debugSourcePage) && (
+                  <span className="block text-zinc-600 mt-0.5" title={resultB!.irHosting.debugSourcePage}>
+                    {resultB!.irHosting.debugDecisiveSignal}
+                    {resultB!.irHosting.debugSourcePage && ` · ${resultB!.irHosting.debugSourcePage}`}
+                  </span>
+                )}
               </span>
             )}
           </div>

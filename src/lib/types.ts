@@ -76,6 +76,14 @@ export interface IrHostingResult {
   confidence: "high" | "medium";
   /** Tools/feeds provider when host is Internal/Other and vendor fingerprints appear only on tools pages. */
   toolsFeedsProvider?: ToolsFeedsProvider;
+  /** Debug: same as irHostProvider (for display). */
+  debugHost?: string;
+  /** Debug: same as confidence. */
+  debugConfidence?: "high" | "medium";
+  /** Debug: which signal decided the host (e.g. "Powered by Q4", "q4cdn in HTML"). */
+  debugDecisiveSignal?: string;
+  /** Debug: URL or "index" for the page where the decisive signal was found. */
+  debugSourcePage?: string;
 }
 
 export interface DomainResult {
