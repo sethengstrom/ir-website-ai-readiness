@@ -110,17 +110,36 @@ const CATEGORY_ITEMS = [
 /** Only show the "Low score?" warning when IR checklist is strictly below this value. */
 const IR_CHECKLIST_LOW_THRESHOLD = 30;
 
-const PRESET_IR_SITES_A = [
-  { name: "Alphabet", url: "https://abc.xyz/investor/" },
-  { name: "Netflix", url: "https://ir.netflix.net" },
-  { name: "Tesla", url: "https://ir.tesla.com" },
-  { name: "NVIDIA", url: "https://investor.nvidia.com" },
-] as const;
+type PresetColor = "blue" | "green" | "red" | "grey";
+const PRESET_IR_SITES_A: { name: string; url: string; color: PresetColor }[] = [
+  { name: "Tesla", url: "https://ir.tesla.com", color: "grey" },
+  { name: "Lyft", url: "https://investor.lyft.com/", color: "red" },
+  { name: "Zoom", url: "https://investors.zoom.us/", color: "red" },
+  { name: "Ulta", url: "https://www.ulta.com/investor", color: "green" },
+  { name: "Equifax", url: "https://investor.equifax.com/", color: "green" },
+  { name: "Alphabet", url: "https://abc.xyz/investor/", color: "blue" },
+  { name: "Netflix", url: "https://ir.netflix.net", color: "blue" },
+  { name: "NVIDIA", url: "https://investor.nvidia.com", color: "blue" },
+];
 const PRESET_IR_SITES_B = [
   { name: "Workday", url: "https://investor.workday.com/" },
   { name: "Tetra Tech", url: "https://investor.tetratech.com/overview/default.aspx" },
   { name: "Emera", url: "https://investors.emera.com/overview/default.aspx" },
 ] as const;
+
+function presetButtonClass(color: PresetColor): string {
+  const base = "px-2.5 py-1 rounded text-sm font-medium disabled:opacity-50 transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[var(--background)]";
+  switch (color) {
+    case "grey":
+      return `${base} bg-zinc-700 hover:bg-zinc-600 text-zinc-200 focus:ring-emerald-500/50`;
+    case "blue":
+      return `${base} bg-blue-600 hover:bg-blue-500 text-white focus:ring-blue-500/50`;
+    case "green":
+      return `${base} bg-emerald-600 hover:bg-emerald-500 text-white focus:ring-emerald-500/50`;
+    case "red":
+      return `${base} bg-red-600 hover:bg-red-500 text-white focus:ring-red-500/50`;
+  }
+}
 
 function scoreColorClass(score: number): string {
   if (score >= 80) return "text-emerald-400";
@@ -755,8 +774,8 @@ function HomeContent() {
       </header>
 
       <main id="main-content" className="max-w-7xl mx-auto px-4 py-8" tabIndex={-1}>
-        <form onSubmit={handleSubmit} className="flex flex-col md:flex-row md:flex-wrap gap-4 md:items-end mb-8">
-          <div className="w-full md:flex-1 md:min-w-[200px] min-w-0">
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-8">
+          <div className="min-w-0">
             <label htmlFor="domain-a" className="block text-sm text-zinc-400 mb-1">Domain A</label>
             <input
               id="domain-a"
@@ -769,13 +788,13 @@ function HomeContent() {
               autoComplete="url"
             />
             <div className="flex flex-wrap gap-1.5 mt-2 min-w-0">
-              {PRESET_IR_SITES_A.map(({ name, url }) => (
+              {PRESET_IR_SITES_A.map(({ name, url, color }) => (
                 <button
                   key={`a-${name}`}
                   type="button"
                   onClick={() => setDomainA(url)}
                   disabled={loading}
-                  className="px-2.5 py-1 rounded text-sm font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-200 disabled:opacity-50 transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2 focus:ring-offset-[var(--background)]"
+                  className={presetButtonClass(color)}
                   aria-label={`Use ${name} as Domain A`}
                 >
                   {name}
@@ -783,14 +802,7 @@ function HomeContent() {
               ))}
             </div>
           </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full md:w-auto px-6 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0 md:self-center focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-[var(--background)]"
-          >
-            {loading ? "Scanning…" : domainB.trim() ? "Compare" : "Scan"}
-          </button>
-          <div className="w-full md:flex-1 md:min-w-[200px] min-w-0">
+          <div className="min-w-0">
             <label htmlFor="domain-b" className="block text-sm text-zinc-400 mb-1">Domain B (optional)</label>
             <input
               id="domain-b"
@@ -809,13 +821,22 @@ function HomeContent() {
                   type="button"
                   onClick={() => setDomainB(url)}
                   disabled={loading}
-                  className="px-2.5 py-1 rounded text-sm font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-200 disabled:opacity-50 transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2 focus:ring-offset-[var(--background)]"
+                  className={presetButtonClass("blue")}
                   aria-label={`Use ${name} as Domain B`}
                 >
                   {name}
                 </button>
               ))}
             </div>
+          </div>
+          <div className="md:col-span-2">
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full md:w-auto px-6 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-[var(--background)]"
+            >
+              {loading ? "Scanning…" : domainB.trim() ? "Compare" : "Scan"}
+            </button>
           </div>
         </form>
 
