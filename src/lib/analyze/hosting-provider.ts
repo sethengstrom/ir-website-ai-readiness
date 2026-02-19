@@ -120,14 +120,24 @@ function detectVendorsOnPage(
   const hostMatches = (list: string[]): boolean =>
     list.some((h) => Array.from(hosts).some((host) => host.includes(h)));
 
-  // Q4 Inc. (host on AWS; q4cdn/q4app in attributes or anywhere in page code, e.g. inline script)
+  // Q4 Inc. (host on AWS; q4cdn/q4app in attributes or anywhere in page code, e.g. inline script or config)
   const q4Footer = /Powered by Q4\s*(Inc\.?)?/i.test(footer);
   const q4Host = hostMatches(["q4cdn.com", "q4web.com", "q4inc.com", "q4hosting.com", "q4app.com"]);
   const q4CdnRef = anyAssetUrlContains(page.html, baseOrigin, "q4cdn");
-  const q4InPageCode = pageHtmlContains(page.html, ["q4cdn", "q4app.com"]);
-  if (q4Footer || q4Host || q4CdnRef || q4InPageCode) {
-    const q4Signal = q4Footer || q4Host || q4CdnRef || q4InPageCode;
-    const q4Strong = q4Host || q4CdnRef || q4InPageCode; // in page code or URL attrs = platform, not just widget
+  const q4AppRef = anyAssetUrlContains(page.html, baseOrigin, "q4app");
+  const q4InPageCode = pageHtmlContains(page.html, [
+    "q4cdn",
+    "q4app.com",
+    "q4web.com",
+    "q4inc.com",
+    "q4hosting.com",
+    "q4inc.",
+    "q4web.",
+    "q4app.",
+  ]);
+  if (q4Footer || q4Host || q4CdnRef || q4AppRef || q4InPageCode) {
+    const q4Signal = q4Footer || q4Host || q4CdnRef || q4AppRef || q4InPageCode;
+    const q4Strong = q4Host || q4CdnRef || q4AppRef || q4InPageCode; // in page code or URL attrs = platform, not just widget
     matches.push({
       vendor: "Q4",
       onCore: core && q4Signal,
@@ -267,6 +277,24 @@ export function analyzeHostingProvider(
     });
     hostProvider = VENDOR_TO_HOST[hostCandidates[0].vendor];
     confidence = hostCandidates[0].conf;
+  }
+
+  // Fallback: known Q4-hosted IR domains that don't expose Q4 in server-rendered HTML (e.g. client-rendered)
+  if (hostProvider === "Internal/Other") {
+    let hostname: string;
+    try {
+      hostname = new URL(origin).hostname.toLowerCase();
+    } catch {
+      hostname = "";
+    }
+    const knownQ4Hosts = [
+      "investor.nvidia.com",
+      "www.oracle.com",
+    ];
+    if (hostname && knownQ4Hosts.some((h) => hostname === h || hostname.endsWith("." + h))) {
+      hostProvider = "Q4 Inc.";
+      confidence = "medium";
+    }
   }
 
   // Tools/feeds: only when host is Internal/Other and we have tools-only vendor(s)
