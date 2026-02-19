@@ -14,10 +14,19 @@ function scoreColorClass(score: number): string {
   return "text-red-400";
 }
 
-function ScoreCell({ value }: { value: number | null | undefined }) {
-  if (value == null) return <td className="px-3 py-2 text-zinc-500 tabular-nums">—</td>;
+function ScoreCell({
+  value,
+  highlight,
+}: {
+  value: number | null | undefined;
+  highlight?: boolean;
+}) {
+  const base = "px-3 py-2 text-center tabular-nums";
+  const highlightClass = highlight ? "bg-emerald-500/10 border-x border-[var(--card-border)]" : "";
+  if (value == null)
+    return <td className={`${base} text-zinc-500 ${highlightClass}`}>—</td>;
   return (
-    <td className={`px-3 py-2 tabular-nums font-medium ${scoreColorClass(value)}`}>
+    <td className={`${base} font-medium ${scoreColorClass(value)} ${highlightClass}`}>
       {value}
     </td>
   );
@@ -54,12 +63,12 @@ export default function SP100Page() {
                 <th className="px-3 py-3 text-left font-semibold text-[var(--foreground)]">Company</th>
                 <th className="px-3 py-3 text-left font-semibold text-[var(--foreground)]">Ticker</th>
                 <th className="px-3 py-3 text-left font-semibold text-[var(--foreground)]">IR domain</th>
-                <th className="px-3 py-3 text-right font-semibold text-[var(--foreground)]">Overall</th>
-                <th className="px-3 py-3 text-right font-semibold text-[var(--foreground)]">Crawl</th>
-                <th className="px-3 py-3 text-right font-semibold text-[var(--foreground)]">Struct</th>
-                <th className="px-3 py-3 text-right font-semibold text-[var(--foreground)]">Parse</th>
-                <th className="px-3 py-3 text-right font-semibold text-[var(--foreground)]">Fresh</th>
-                <th className="px-3 py-3 text-right font-semibold text-[var(--foreground)]">IR list</th>
+                <th className="px-3 py-3 text-center font-semibold text-[var(--foreground)] bg-emerald-500/10 border-x border-[var(--card-border)]">Overall</th>
+                <th className="px-3 py-3 text-center font-semibold text-[var(--foreground)]">Crawl</th>
+                <th className="px-3 py-3 text-center font-semibold text-[var(--foreground)]">Struct</th>
+                <th className="px-3 py-3 text-center font-semibold text-[var(--foreground)]">Parse</th>
+                <th className="px-3 py-3 text-center font-semibold text-[var(--foreground)]">Fresh</th>
+                <th className="px-3 py-3 text-center font-semibold text-[var(--foreground)]">IR list</th>
                 <th className="px-3 py-3 text-left font-semibold text-[var(--foreground)]">Action</th>
               </tr>
             </thead>
@@ -78,7 +87,7 @@ export default function SP100Page() {
                       <span className="text-zinc-500">—</span>
                     )}
                   </td>
-                  <ScoreCell value={row.overallScore ?? undefined} />
+                  <ScoreCell value={row.overallScore ?? undefined} highlight />
                   <ScoreCell value={row.categoryScores?.crawlability} />
                   <ScoreCell value={row.categoryScores?.structuredData} />
                   <ScoreCell value={row.categoryScores?.parseability} />
