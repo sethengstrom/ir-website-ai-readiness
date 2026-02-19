@@ -58,6 +58,26 @@ export interface StructuredDataBreakdown {
   missingRecommendedTypes: string[];
 }
 
+/** Detected IR site hosting provider (deterministic fingerprints). */
+export type IrHostProvider =
+  | "Q4 Inc."
+  | "Notified"
+  | "Equisolve"
+  | "Investis"
+  | "Internal/Other";
+
+/** Detected provider for tools/feeds (stock quote, SEC filings) when IR site is company-hosted. */
+export type ToolsFeedsProvider = "Q4 Inc." | "Notified" | "Equisolve" | "Investis" | "Multiple";
+
+export interface IrHostingResult {
+  /** Primary IR site host. */
+  irHostProvider: IrHostProvider;
+  /** Confidence of host detection. */
+  confidence: "high" | "medium";
+  /** Tools/feeds provider when host is Internal/Other and vendor fingerprints appear only on tools pages. */
+  toolsFeedsProvider?: ToolsFeedsProvider;
+}
+
 export interface DomainResult {
   domain: string;
   origin: string;
@@ -74,6 +94,8 @@ export interface DomainResult {
   aiCitationReadiness?: number;
   /** Per-question answerability for investor Q&A. */
   investorQuestionCoverage?: InvestorQuestionCoverage;
+  /** Detected IR hosting provider and optional tools/feeds provider. */
+  irHosting?: IrHostingResult;
 }
 
 /** Per-question result for Investor Question Coverage (AI answerability). */

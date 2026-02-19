@@ -111,16 +111,18 @@ const CATEGORY_ITEMS = [
 const IR_CHECKLIST_LOW_THRESHOLD = 30;
 
 type PresetColor = "blue" | "green" | "red" | "grey";
+const PRESET_COLOR_ORDER: PresetColor[] = ["grey", "red", "green", "blue"];
 const PRESET_IR_SITES_A: { name: string; url: string; color: PresetColor }[] = [
   { name: "Tesla", url: "https://ir.tesla.com", color: "grey" },
-  { name: "Lyft", url: "https://investor.lyft.com/", color: "red" },
   { name: "Zoom", url: "https://investors.zoom.us/", color: "red" },
+  { name: "Hershey's", url: "https://investors.thehersheycompany.com/", color: "red" },
+  { name: "Lyft", url: "https://investor.lyft.com/", color: "green" },
   { name: "Ulta", url: "https://www.ulta.com/investor", color: "green" },
   { name: "Equifax", url: "https://investor.equifax.com/", color: "green" },
   { name: "Alphabet", url: "https://abc.xyz/investor/", color: "blue" },
   { name: "Netflix", url: "https://ir.netflix.net", color: "blue" },
   { name: "NVIDIA", url: "https://investor.nvidia.com", color: "blue" },
-];
+].sort((a, b) => PRESET_COLOR_ORDER.indexOf(a.color) - PRESET_COLOR_ORDER.indexOf(b.color));
 const PRESET_IR_SITES_B = [
   { name: "Workday", url: "https://investor.workday.com/" },
   { name: "Tetra Tech", url: "https://investor.tetratech.com/overview/default.aspx" },
@@ -323,6 +325,13 @@ function ResultsByCategory({
           <span className="text-sm text-zinc-500">
             overall · {resultA.crawledPageCount} pages
           </span>
+          {resultA.irHosting && (
+            <span className="text-xs text-zinc-500 block mt-0.5">
+              IR host: {resultA.irHosting.irHostProvider}
+              {resultA.irHosting.toolsFeedsProvider && ` · Tools: ${resultA.irHosting.toolsFeedsProvider}`}
+              {" "}({resultA.irHosting.confidence})
+            </span>
+          )}
         </div>
       </div>
       <div className={`flex flex-col items-center gap-1 min-w-0 ${singleDomain ? "" : "col-span-2 md:col-span-1"} md:min-w-[7rem] order-1 md:order-2`}>
@@ -366,6 +375,13 @@ function ResultsByCategory({
             <span className="text-sm text-zinc-500">
               overall · {resultB!.crawledPageCount} pages
             </span>
+            {resultB!.irHosting && (
+              <span className="text-xs text-zinc-500 block mt-0.5">
+                IR host: {resultB!.irHosting.irHostProvider}
+                {resultB!.irHosting.toolsFeedsProvider && ` · Tools: ${resultB!.irHosting.toolsFeedsProvider}`}
+                {" "}({resultB!.irHosting.confidence})
+              </span>
+            )}
           </div>
         </div>
       )}

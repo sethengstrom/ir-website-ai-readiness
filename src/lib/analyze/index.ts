@@ -10,6 +10,7 @@ import { analyzeIRChecklist } from "./ir-checklist";
 import { analyzeResponseMetrics } from "./response-metrics";
 import { analyzeInvestorQuestionCoverage, getUnavailableInvestorCoverage } from "./investor-questions";
 import { extractJsonLdFacts } from "./json-ld-facts";
+import { analyzeHostingProvider } from "./hosting-provider";
 
 const DEFAULT_CATEGORY_SCORE = 0;
 const EMPTY_FINDINGS: Finding[] = [];
@@ -78,6 +79,12 @@ export function analyzeDomain(result: CrawlResult, options?: AnalyzeOptions): Do
     "irChecklist",
     () => analyzeIRChecklist(result.pages),
     { score: DEFAULT_CATEGORY_SCORE, findings: EMPTY_FINDINGS }
+  );
+  onProgress?.("Detecting IR hosting provider…");
+  const irHosting = runAnalyzer(
+    "irHosting",
+    () => analyzeHostingProvider(result.pages, result.origin),
+    { irHostProvider: "Internal/Other" as const, confidence: "medium" as const }
   );
   const responseMetrics = runAnalyzer(
     "responseMetrics",
@@ -155,5 +162,6 @@ export function analyzeDomain(result: CrawlResult, options?: AnalyzeOptions): Do
     structuredDataBreakdown: structuredData.breakdown,
     aiCitationReadiness: Math.min(100, Math.max(0, aiCitationReadiness)),
     investorQuestionCoverage,
+    irHosting,
   };
 }

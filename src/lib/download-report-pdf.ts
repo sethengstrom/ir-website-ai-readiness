@@ -61,12 +61,23 @@ export function downloadResultsPdf(resultA: DomainResult, resultB: DomainResult 
   doc.setFont("helvetica", "normal");
   doc.text(sanitize(domainALabel), 32, y, { maxWidth: pageWidth - 40 });
   y += 6;
+  if (resultA.irHosting) {
+    const hostLine = `IR host: ${resultA.irHosting.irHostProvider}${resultA.irHosting.toolsFeedsProvider ? `; Tools: ${resultA.irHosting.toolsFeedsProvider}` : ""} (${resultA.irHosting.confidence})`;
+    doc.setFont("helvetica", "normal");
+    doc.text(sanitize(hostLine), 32, y, { maxWidth: pageWidth - 40 });
+    y += 6;
+  }
   if (resultB) {
     doc.setFont("helvetica", "bold");
     doc.text("Domain B:", 14, y);
     doc.setFont("helvetica", "normal");
     doc.text(sanitize(domainBLabel), 32, y, { maxWidth: pageWidth - 40 });
     y += 6;
+    if (resultB.irHosting) {
+      const hostLineB = `IR host: ${resultB.irHosting.irHostProvider}${resultB.irHosting.toolsFeedsProvider ? `; Tools: ${resultB.irHosting.toolsFeedsProvider}` : ""} (${resultB.irHosting.confidence})`;
+      doc.text(sanitize(hostLineB), 32, y, { maxWidth: pageWidth - 40 });
+      y += 6;
+    }
   }
   y += 4;
 

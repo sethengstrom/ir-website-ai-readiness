@@ -32,7 +32,23 @@ function ScoreCell({
   );
 }
 
+function formatLastScanDate(isoDate: string | null | undefined): string {
+  if (!isoDate) return "—";
+  const match = isoDate.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return isoDate;
+  const [, y, m, d] = match;
+  const month = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("en-US", { month: "long" });
+  return `${month} ${Number(d)}, ${y}`;
+}
+
 export default function SP100Page() {
+  const lastScanned = SP100_RESULTS.reduce<string | null>((latest, row) => {
+    const d = row.lastScanned?.trim();
+    if (!d) return latest;
+    if (!latest) return d;
+    return d > latest ? d : latest;
+  }, null);
+
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
       <header className="border-b border-[var(--card-border)] bg-[var(--card)]/50">
@@ -48,6 +64,9 @@ export default function SP100Page() {
           </p>
           <p className="text-[var(--muted)] text-sm mt-2">
             Scores are from our scanner (server-rendered HTML only). Use the scanner to run or refresh results for any domain.
+          </p>
+          <p className="text-zinc-400 text-sm mt-1">
+            Last scan: <span className="text-[var(--foreground)] font-medium">{formatLastScanDate(lastScanned ?? undefined)}</span>
           </p>
         </div>
       </header>
