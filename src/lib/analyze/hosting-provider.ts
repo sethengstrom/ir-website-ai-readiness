@@ -122,6 +122,51 @@ function pageHtmlContains(html: string, substrings: string[]): boolean {
   return substrings.some((s) => lower.includes(s.toLowerCase()));
 }
 
+/** NIR fingerprint (Notified IR): field_nir_ / field_nir_sec_* (+10 auto-host), nir_sec_ (+8). High-confidence for investors.zoom.us etc. */
+function findNirOnPage(pageUrl: string, html: string, baseOrigin: string): { fieldNir: boolean; nirSec: boolean; source: string } | null {
+  const urlLower = pageUrl.toLowerCase();
+  const lower = html.toLowerCase();
+  const hasFieldNir = (s: string) => /field_nir_/.test(s);
+  const hasNirSec = (s: string) => /nir_sec_/.test(s);
+  if (hasFieldNir(urlLower) || hasNirSec(urlLower)) {
+    return { fieldNir: hasFieldNir(urlLower), nirSec: hasNirSec(urlLower), source: "url" };
+  }
+  if (hasFieldNir(lower) || hasNirSec(lower)) {
+    return { fieldNir: hasFieldNir(lower), nirSec: hasNirSec(lower), source: "html" };
+  }
+  const $ = cheerio.load(html);
+  try {
+    const base = new URL(baseOrigin).origin;
+    let found: { fieldNir: boolean; nirSec: boolean; source: string } | null = null;
+    $("a[href]").each((_, el) => {
+      if (found) return;
+      const href = $(el).attr("href");
+      if (!href) return;
+      try {
+        const u = new URL(href, baseOrigin);
+        if (u.origin !== base) return;
+        const h = u.href.toLowerCase();
+        if (hasFieldNir(h) || hasNirSec(h)) {
+          found = { fieldNir: hasFieldNir(h), nirSec: hasNirSec(h), source: "link" };
+        }
+      } catch {
+        // skip
+      }
+    });
+    if (found) return found;
+    $("script:not([src])").each((_, el) => {
+      if (found) return;
+      const t = ($(el).html() || "").toLowerCase();
+      if (hasFieldNir(t) || hasNirSec(t)) {
+        found = { fieldNir: hasFieldNir(t), nirSec: hasNirSec(t), source: "script" };
+      }
+    });
+    return found;
+  } catch {
+    return null;
+  }
+}
+
 type VendorId = "Q4" | "Notified" | "Equisolve" | "Investis";
 
 interface PageMatch {
@@ -134,6 +179,10 @@ interface PageMatch {
   strongPlatformSignal?: boolean;
   /** Human-readable label for debug (which signal fired). */
   decisiveSignalLabel?: string;
+  /** Extra score weight for this match (e.g. NIR: +10 or +8). */
+  scoreBonus?: number;
+  /** Notified NIR fingerprint present: qualifies even on tools-only pages, prevents tools-only filter. */
+  notifiedNirSignal?: boolean;
 }
 
 function detectVendorsOnPage(
@@ -220,7 +269,8 @@ function detectVendorsOnPage(
     "External.File?item=",
   ]);
   const notifiedWeakText = /Data provided by Refinitiv/i.test(text) || /Data provided by Kaleidoscope/i.test(text);
-  const notifiedStrong = notifiedStrongHost || notifiedPathFingerprints;
+  const notifiedNir = findNirOnPage(page.url, page.html, baseOrigin);
+  const notifiedStrong = notifiedStrongHost || notifiedPathFingerprints || !!notifiedNir;
   const notifiedSignal = notifiedStrong || notifiedWeakText;
   if (notifiedSignal) {
     const coreForNotified = core || (() => {
@@ -231,6 +281,9 @@ function detectVendorsOnPage(
         return false;
       }
     })();
+    const nirLabel = notifiedNir
+      ? (notifiedNir.fieldNir ? "NIR fingerprint (field_nir_)" : "NIR fingerprint (nir_sec_)")
+      : null;
     matches.push({
       vendor: "Notified",
       onCore: coreForNotified && notifiedSignal,
@@ -238,11 +291,26 @@ function detectVendorsOnPage(
       poweredByOnCore: false,
       confidence: notifiedStrong ? "high" : "medium",
       strongPlatformSignal: notifiedStrong,
-      decisiveSignalLabel: notifiedPathFingerprints
+      decisiveSignalLabel: nirLabel ?? (notifiedPathFingerprints
         ? "Notified path fingerprint"
         : notifiedStrongHost
           ? "Notified host"
-          : "Refinitiv/Kaleidoscope text",
+          : "Refinitiv/Kaleidoscope text"),
+      scoreBonus: notifiedNir ? (notifiedNir.fieldNir ? 10 : 8) : undefined,
+      notifiedNirSignal: !!notifiedNir,
+    });
+  }
+  if (notifiedNir && !notifiedSignal) {
+    matches.push({
+      vendor: "Notified",
+      onCore: core,
+      onTools: tools,
+      poweredByOnCore: false,
+      confidence: "high",
+      strongPlatformSignal: true,
+      decisiveSignalLabel: notifiedNir.fieldNir ? "NIR fingerprint (field_nir_)" : "NIR fingerprint (nir_sec_)",
+      scoreBonus: notifiedNir.fieldNir ? 10 : 8,
+      notifiedNirSignal: true,
     });
   }
 
@@ -320,6 +388,10 @@ export async function analyzeHostingProvider(
     strongPlatformSignalOnCore: boolean;
     /** Strong signal on any non-tools-only page (index or core), so Q4 can qualify with 0-1 core. */
     strongPlatformSignalOnNonToolsOnlyPage: boolean;
+    /** Strong signal on any page (including tools-only); used so Notified qualifies when NIR on /sec-filings etc. */
+    strongPlatformSignalOnAnyPage: boolean;
+    /** Notified NIR fingerprint seen: auto-host weight, prevents tools-only exclusion. */
+    notifiedNirSignal: boolean;
     maxConfidence: "high" | "medium";
     /** Weighted score 0–100 for debug (strong signals high, weak low). */
     score: number;
@@ -341,10 +413,12 @@ export async function analyzeHostingProvider(
       const poweredByOnCore = (cur?.poweredByOnCore ?? false) || m.poweredByOnCore;
       const strongPlatformSignalOnCore = (cur?.strongPlatformSignalOnCore ?? false) || (m.onCore && !!m.strongPlatformSignal);
       const strongPlatformSignalOnNonToolsOnlyPage = (cur?.strongPlatformSignalOnNonToolsOnlyPage ?? false) || (!!m.strongPlatformSignal && nonToolsOnlyPage);
+      const strongPlatformSignalOnAnyPage = (cur?.strongPlatformSignalOnAnyPage ?? false) || !!m.strongPlatformSignal;
+      const notifiedNirSignal = (cur?.notifiedNirSignal ?? false) || !!m.notifiedNirSignal;
       const maxConfidence = cur?.maxConfidence === "high" || m.confidence === "high" ? "high" : "medium";
       const scoreDelta = m.onCore || m.onTools ? (m.strongPlatformSignal ? 35 : 10) : 0;
-      const score = Math.min(100, (cur?.score ?? 0) + scoreDelta);
-      const contributesToQualify = m.poweredByOnCore || (m.onCore && !!m.strongPlatformSignal) || m.onCore || (!!m.strongPlatformSignal && nonToolsOnlyPage);
+      const score = Math.min(100, (cur?.score ?? 0) + scoreDelta + (m.scoreBonus ?? 0));
+      const contributesToQualify = m.poweredByOnCore || (m.onCore && !!m.strongPlatformSignal) || m.onCore || (!!m.strongPlatformSignal && nonToolsOnlyPage) || !!m.notifiedNirSignal;
       const label = m.decisiveSignalLabel ?? (m.onCore || m.poweredByOnCore ? VENDOR_TO_HOST[m.vendor] : undefined);
       const exampleDecisiveSignal = cur?.exampleDecisiveSignal ?? (contributesToQualify && label ? label : undefined);
       const exampleSourcePage = cur?.exampleSourcePage ?? (contributesToQualify ? (i === 0 ? "index" : page.url) : undefined);
@@ -356,6 +430,8 @@ export async function analyzeHostingProvider(
         poweredByOnCore,
         strongPlatformSignalOnCore,
         strongPlatformSignalOnNonToolsOnlyPage,
+        strongPlatformSignalOnAnyPage,
+        notifiedNirSignal,
         maxConfidence,
         score,
         exampleDecisiveSignal: exampleDecisiveSignal || cur?.exampleDecisiveSignal,
@@ -364,11 +440,12 @@ export async function analyzeHostingProvider(
     }
   }
 
-  /** Q4/Notified are not tools-only if seen on the index page. */
+  /** Q4/Notified are not tools-only if seen on index or when Notified has NIR fingerprint. */
   const toolsOnly = (v: VendorId): boolean => {
     const data = byVendor.get(v);
     if (!data || !data.sawOnTools || data.sawOnCore) return false;
-    if ((v === "Q4" || v === "Notified") && data.sawOnIndexPage) return false;
+    if (v === "Q4" && data.sawOnIndexPage) return false;
+    if (v === "Notified" && (data.sawOnIndexPage || data.notifiedNirSignal)) return false;
     return true;
   };
 
@@ -389,7 +466,7 @@ export async function analyzeHostingProvider(
       data.poweredByOnCore ||
       (data.coreCount >= 1 && data.strongPlatformSignalOnCore) ||
       (v === "Q4" && data.strongPlatformSignalOnNonToolsOnlyPage) ||
-      (v === "Notified" && data.strongPlatformSignalOnCore);
+      (v === "Notified" && (data.strongPlatformSignalOnCore || data.strongPlatformSignalOnAnyPage || data.notifiedNirSignal));
     if (qualifies) {
       hostCandidates.push({ vendor: v, conf: data.maxConfidence, data });
     }
