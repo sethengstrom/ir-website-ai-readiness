@@ -33,6 +33,8 @@ function formatRow(row: SP100Row): string {
     );
   }
   if (row.lastScanned != null) parts.push(`lastScanned: ${JSON.stringify(row.lastScanned)}`);
+  if (row.irHostProvider != null && row.irHostProvider !== "") parts.push(`irHostProvider: ${JSON.stringify(row.irHostProvider)}`);
+  if (row.toolsFeedsProvider != null && row.toolsFeedsProvider !== "") parts.push(`toolsFeedsProvider: ${JSON.stringify(row.toolsFeedsProvider)}`);
   return `  { ${parts.join(", ")} }`;
 }
 
@@ -72,6 +74,8 @@ async function main() {
         overallScore: analyzed.overallScore,
         categoryScores: analyzed.categoryScores,
         lastScanned: today,
+        irHostProvider: analyzed.irHosting?.irHostProvider ?? null,
+        toolsFeedsProvider: analyzed.irHosting?.toolsFeedsProvider ?? null,
       };
       done++;
       console.log(`OK overall=${analyzed.overallScore}`);

@@ -20,4 +20,8 @@ export interface SP100Row {
   categoryScores?: CategoryScoresRow | null;
   /** ISO date when this row was last scanned. */
   lastScanned?: string | null;
+  /** Detected IR site host (e.g. Q4 Inc., Notified, Equisolve, Investis, Internal/Other). */
+  irHostProvider?: string | null;
+  /** Detected tools/feeds provider when host is Internal/Other (e.g. Notified, Multiple). */
+  toolsFeedsProvider?: string | null;
 }
