@@ -93,16 +93,19 @@ export async function analyzeDomain(result: CrawlResult, options?: AnalyzeOption
   onProgress?.("Detecting IR hosting provider…");
   const firstPage = result.pages[0];
   let pagesForHosting = result.pages;
+  const firstPageBlockedOrEmpty =
+    firstPage?.fetchQuality === "blocked" || !firstPage?.html?.trim();
+  const firstPageJsShell = firstPage?.fetchQuality === "JS-shell";
   const usePlaywrightForHosting =
     result.pages.length > 0 &&
-    process.env.PLAYWRIGHT_RENDER === "1" &&
-    (firstPage?.fetchQuality === "JS-shell" ||
-      firstPage?.fetchQuality === "blocked" ||
-      !firstPage?.html?.trim());
+    (firstPageBlockedOrEmpty ||
+      (firstPageJsShell && process.env.PLAYWRIGHT_RENDER === "1"));
   if (usePlaywrightForHosting) {
-    onProgress?.("Rendering first page with Playwright (JS-shell/blocked fallback)…");
+    onProgress?.("Rendering first page with Playwright (blocked/JS-shell fallback)…");
     const firstUrl = result.firstPageFinalUrl || firstPage.url || result.origin;
-    const rendered = await renderWithPlaywright(firstUrl);
+    const rendered = await renderWithPlaywright(firstUrl, {
+      allowWithoutEnvVar: firstPageBlockedOrEmpty,
+    });
     if (rendered?.html) {
       pagesForHosting = [
         {

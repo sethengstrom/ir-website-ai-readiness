@@ -16,13 +16,22 @@ export interface PlaywrightRenderResult {
 const RENDER_TIMEOUT_MS = 15000;
 const WAIT_AFTER_LOAD_MS = 2000;
 
+export interface RenderWithPlaywrightOptions {
+  /** When true, run even if PLAYWRIGHT_RENDER is not set (used when first page was blocked/empty). */
+  allowWithoutEnvVar?: boolean;
+}
+
 /**
- * If PLAYWRIGHT_RENDER=1 and Playwright is available, loads the URL in headless Chromium,
+ * When PLAYWRIGHT_RENDER=1 (or allowWithoutEnvVar), loads the URL in headless Chromium,
  * waits for load + brief settle, returns rendered HTML and hostnames from requests.
  * Otherwise returns null (no-op).
  */
-export async function renderWithPlaywright(url: string): Promise<PlaywrightRenderResult | null> {
-  if (process.env.PLAYWRIGHT_RENDER !== "1") return null;
+export async function renderWithPlaywright(
+  url: string,
+  options?: RenderWithPlaywrightOptions
+): Promise<PlaywrightRenderResult | null> {
+  const allow = process.env.PLAYWRIGHT_RENDER === "1" || options?.allowWithoutEnvVar === true;
+  if (!allow) return null;
 
   let playwright: typeof import("playwright");
   try {
