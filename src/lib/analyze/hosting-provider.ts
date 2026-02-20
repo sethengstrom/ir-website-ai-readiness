@@ -542,7 +542,7 @@ export async function analyzeHostingProvider(
     let hostname: string;
     try {
       const urlToUse =
-        options.firstPageFinalUrl && options.firstPageFinalUrl.startsWith("http")
+        options?.firstPageFinalUrl && options.firstPageFinalUrl.startsWith("http")
           ? options.firstPageFinalUrl
           : origin.startsWith("http")
             ? origin
