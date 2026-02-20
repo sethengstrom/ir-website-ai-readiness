@@ -108,6 +108,8 @@ export interface DomainResult {
   investorQuestionCoverage?: InvestorQuestionCoverage;
   /** Detected IR hosting provider and optional tools/feeds provider. */
   irHosting?: IrHostingResult;
+  /** Fetch outcome for first page: OK, JS-shell, or blocked/403 (for SP100 and diagnostics). */
+  firstPageFetchQuality?: "OK" | "JS-shell" | "blocked";
 }
 
 /** Per-question result for Investor Question Coverage (AI answerability). */

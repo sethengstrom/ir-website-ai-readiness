@@ -137,6 +137,9 @@ export default function SP100Table({ rows }: { rows: SP100Row[] }) {
               onSort={handleSort}
               className="px-3 py-3 text-left"
             />
+            <th className="px-3 py-3 text-center font-semibold text-[var(--foreground)]" title="First-page fetch: OK, JS-shell, or blocked/403">
+              Fetch
+            </th>
             <th className="px-3 py-3 text-left font-semibold text-[var(--foreground)]">Action</th>
           </tr>
         </thead>
@@ -173,6 +176,24 @@ export default function SP100Table({ rows }: { rows: SP100Row[] }) {
                   <span className="text-xs">
                     {row.irHostProvider}
                     {row.toolsFeedsProvider ? ` · ${row.toolsFeedsProvider}` : ""}
+                  </span>
+                ) : (
+                  <span className="text-zinc-500">—</span>
+                )}
+              </td>
+              <td className="px-3 py-2 text-center text-xs">
+                {row.fetchQuality ? (
+                  <span
+                    className={
+                      row.fetchQuality === "OK"
+                        ? "text-emerald-400"
+                        : row.fetchQuality === "blocked"
+                          ? "text-red-400"
+                          : "text-amber-400"
+                    }
+                    title={row.fetchQuality === "blocked" ? "Blocked or 403" : row.fetchQuality === "JS-shell" ? "SPA shell, little server HTML" : "OK"}
+                  >
+                    {row.fetchQuality}
                   </span>
                 ) : (
                   <span className="text-zinc-500">—</span>

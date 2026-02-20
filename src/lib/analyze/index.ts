@@ -97,6 +97,7 @@ export async function analyzeDomain(result: CrawlResult, options?: AnalyzeOption
       analyzeHostingProvider(result.pages, result.origin, {
         firstPageFinalUrl: result.firstPageFinalUrl,
         firstPageFetchQuality: firstPage?.fetchQuality,
+        probedFinalUrls: result.probedFinalUrls,
       }),
     { irHostProvider: "Internal/Other" as const, confidence: "medium" as const }
   );
@@ -177,5 +178,6 @@ export async function analyzeDomain(result: CrawlResult, options?: AnalyzeOption
     aiCitationReadiness: Math.min(100, Math.max(0, aiCitationReadiness)),
     investorQuestionCoverage,
     irHosting,
+    firstPageFetchQuality: firstPageForFavicon?.fetchQuality,
   };
 }

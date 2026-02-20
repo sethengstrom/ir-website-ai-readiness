@@ -8,6 +8,7 @@ import * as cheerio from "cheerio";
 import type { CrawlPage } from "../crawler";
 import type { IrHostingResult, IrHostProvider, ToolsFeedsProvider } from "../types";
 import { isLikelyIRPath } from "../url-utils";
+import type { ProbedUrl } from "../crawler";
 import { detectVendorFromDns } from "../dns-vendor-detection";
 
 const CORE_PATH = /overview|about|news|press|events|presentations?|financials?/i;
@@ -371,6 +372,8 @@ export interface HostingProviderOptions {
   firstPageFinalUrl?: string;
   /** Fetch quality of first page; when poor, DNS/CNAME detection is used. */
   firstPageFetchQuality?: "OK" | "JS-shell" | "blocked";
+  /** Forced probe results; final URLs checked for NIR fingerprint even when fetch failed (e.g. 403). */
+  probedFinalUrls?: ProbedUrl[];
 }
 
 export async function analyzeHostingProvider(
@@ -440,6 +443,33 @@ export async function analyzeHostingProvider(
     }
   }
 
+  // Forced probe: NIR in any probed final URL (even on 403) is high-confidence Notified, bypasses tools-only
+  if (options?.probedFinalUrls?.length) {
+    for (const p of options.probedFinalUrls) {
+      const u = (p.finalUrl || p.requested).toLowerCase();
+      if (!/field_nir_|nir_sec_/.test(u)) continue;
+      const cur = byVendor.get("Notified");
+      const scoreBonus = /field_nir_/.test(u) ? 10 : 8;
+      const source = p.finalUrl || p.requested;
+      const signalLabel = /field_nir_/.test(u) ? "NIR fingerprint (field_nir_) in probed URL" : "NIR fingerprint (nir_sec_) in probed URL";
+      byVendor.set("Notified", {
+        coreCount: cur?.coreCount ?? 0,
+        sawOnCore: cur?.sawOnCore ?? false,
+        sawOnTools: cur?.sawOnTools ?? true,
+        sawOnIndexPage: cur?.sawOnIndexPage ?? false,
+        poweredByOnCore: cur?.poweredByOnCore ?? false,
+        strongPlatformSignalOnCore: cur?.strongPlatformSignalOnCore ?? false,
+        strongPlatformSignalOnNonToolsOnlyPage: cur?.strongPlatformSignalOnNonToolsOnlyPage ?? false,
+        strongPlatformSignalOnAnyPage: true,
+        notifiedNirSignal: true,
+        maxConfidence: "high",
+        score: Math.min(100, (cur?.score ?? 0) + scoreBonus),
+        exampleDecisiveSignal: cur?.exampleDecisiveSignal ?? signalLabel,
+        exampleSourcePage: cur?.exampleSourcePage ?? source,
+      });
+    }
+  }
+
   /** Q4/Notified are not tools-only if seen on index or when Notified has NIR fingerprint. */
   const toolsOnly = (v: VendorId): boolean => {
     const data = byVendor.get(v);
@@ -504,14 +534,26 @@ export async function analyzeHostingProvider(
             : "1 core + strong signal";
   }
 
-  // Fallback when fetch quality is poor: DNS/CNAME-based vendor detection
-  if (hostProvider === "Internal/Other" && options?.firstPageFetchQuality && options.firstPageFetchQuality !== "OK") {
+  // Fallback when fetch quality is poor or origin/paths blocked: DNS/CNAME on IR hostname
+  if (
+    hostProvider === "Internal/Other" &&
+    (options?.firstPageFetchQuality === "blocked" || options?.firstPageFetchQuality === "JS-shell" || pages.length === 0)
+  ) {
     let hostname: string;
     try {
-      const urlToUse = options.firstPageFinalUrl && options.firstPageFinalUrl.startsWith("http") ? options.firstPageFinalUrl : origin;
+      const urlToUse =
+        options.firstPageFinalUrl && options.firstPageFinalUrl.startsWith("http")
+          ? options.firstPageFinalUrl
+          : origin.startsWith("http")
+            ? origin
+            : `https://${origin}`;
       hostname = new URL(urlToUse).hostname;
     } catch {
-      hostname = "";
+      try {
+        hostname = new URL(origin.startsWith("http") ? origin : `https://${origin}`).hostname;
+      } catch {
+        hostname = "";
+      }
     }
     if (hostname) {
       try {

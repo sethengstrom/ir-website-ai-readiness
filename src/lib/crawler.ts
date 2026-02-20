@@ -130,9 +130,34 @@ const PHASE1A_COUNT = 3;
 const MAX_IR_PAGES = 3;
 /** Max earnings/events/presentations links to fetch in phase 2 (aim for ~20s scan time with more accurate results). */
 const MAX_FOLLOWUP = 20;
-/** Browser-like UA so IR sites (e.g. Ciena) don't block or throttle server requests. */
-const USER_AGENT =
-  "Mozilla/5.0 (compatible; IR-AI-Readiness-Scanner/1.0; +https://github.com/ir-ai-readiness) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36";
+/** Same-origin IR paths to probe for Notified NIR fingerprint (final URL checked even on 403). */
+const FORCED_PROBE_PATHS = [
+  "/sec-filings?order=field_nir_sec_form&sort=asc&items_per_page=10&mobile=1",
+  "/press-releases",
+  "/events-and-presentations",
+  "/financial-information",
+];
+/** Browser header profiles: try Chrome then Safari (and optionally Firefox) to avoid 403 on Notified etc. */
+const BROWSER_HEADER_PROFILES: ReadonlyArray<Record<string, string>> = [
+  {
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    Connection: "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+  },
+  {
+    "User-Agent":
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    Connection: "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+  },
+];
 const RETRY_MAX = 2;
 const RETRY_BASE_MS = 500;
 /** Max response body size (2MB) to avoid OOM on very large pages. */
@@ -188,6 +213,13 @@ export interface CrawlPage {
   finalUrl?: string;
 }
 
+/** Result of probing a path (e.g. forced Notified probe); final URL used for NIR fingerprint even on 403. */
+export interface ProbedUrl {
+  requested: string;
+  finalUrl: string;
+  status: number;
+}
+
 export interface CrawlResult {
   origin: string;
   robots: RobotsResult;
@@ -197,6 +229,8 @@ export interface CrawlResult {
   irUrlsFromCrawl: string[];
   /** Final URL of the first HTML page after redirects (when available). */
   firstPageFinalUrl?: string;
+  /** Forced probe of same-origin IR paths; final URLs used for Notified NIR detection even when fetch fails. */
+  probedFinalUrls?: ProbedUrl[];
 }
 
 /** Optional progress callback for UI updates during crawl. */
@@ -317,25 +351,21 @@ function getFetchQuality(status: number, body: string): FetchQuality {
   return "OK";
 }
 
-async function fetchOne(
-  url: string,
-  acceptHtmlOnly: boolean
-): Promise<{
+export type FetchOneResult = {
   status: number;
   contentType: string;
   body: string;
   responseTimeMs: number;
   lastModified: string | null;
   finalUrl: string;
-}> {
-  let lastResult: {
-    status: number;
-    contentType: string;
-    body: string;
-    responseTimeMs: number;
-    lastModified: string | null;
-    finalUrl: string;
-  } = {
+};
+
+async function fetchOneWithHeaders(
+  url: string,
+  acceptHtmlOnly: boolean,
+  headerProfile: Record<string, string>
+): Promise<FetchOneResult> {
+  let lastResult: FetchOneResult = {
     status: 0,
     contentType: "",
     body: "",
@@ -346,19 +376,15 @@ async function fetchOne(
 
   for (let attempt = 0; attempt <= RETRY_MAX; attempt++) {
     if (attempt > 0) {
-      const backoffMs = RETRY_BASE_MS * Math.pow(2, attempt - 1);
-      await sleep(backoffMs);
+      await sleep(RETRY_BASE_MS * Math.pow(2, attempt - 1));
     }
     const start = Date.now();
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
-      const headers: Record<string, string> = { "User-Agent": USER_AGENT };
-      if (acceptHtmlOnly) headers["Accept"] = "text/html,application/xhtml+xml";
-      const res = await fetch(url, {
-        headers,
-        signal: controller.signal,
-      });
+      const headers: Record<string, string> = { ...headerProfile };
+      if (acceptHtmlOnly) headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+      const res = await fetch(url, { headers, signal: controller.signal, redirect: "follow" });
       const responseTimeMs = Date.now() - start;
       const contentType = res.headers.get("content-type") || "";
       const lastModified = res.headers.get("last-modified");
@@ -387,6 +413,16 @@ async function fetchOne(
     }
   }
   return lastResult;
+}
+
+/** Fetch with browser-like headers; on 403 try next profile (Chrome → Safari) up to 2–3 before declaring blocked. */
+async function fetchOne(url: string, acceptHtmlOnly: boolean): Promise<FetchOneResult> {
+  let last = await fetchOneWithHeaders(url, acceptHtmlOnly, BROWSER_HEADER_PROFILES[0]);
+  for (let i = 1; i < BROWSER_HEADER_PROFILES.length && (last.status === 403 || last.status === 0); i++) {
+    last = await fetchOneWithHeaders(url, acceptHtmlOnly, BROWSER_HEADER_PROFILES[i]);
+    if (last.status !== 403 && last.status !== 0) return last;
+  }
+  return last;
 }
 
 function emptyCrawlResult(origin: string): CrawlResult {
@@ -576,10 +612,16 @@ export async function crawlDomain(domainInput: string, options?: CrawlOptions): 
   }
 
   onProgress?.("Fetching IR entry pages…");
+  let firstIrAttempted: string | null = null;
+  let firstIrResult: FetchOneResult | null = null;
   for (const irUrl of irUrlsToFetch) {
     if (htmlByUrl.has(irUrl)) continue;
     try {
       const irRes = await fetchOne(irUrl, true);
+      if (firstIrAttempted === null) {
+        firstIrAttempted = irUrl;
+        firstIrResult = irRes;
+      }
       if (
         irRes.status === 200 &&
         irRes.body &&
@@ -602,6 +644,17 @@ export async function crawlDomain(domainInput: string, options?: CrawlOptions): 
         } catch {
           // ignore
         }
+      } else if (irUrl === firstIrAttempted && pages.length === 0) {
+        pages.push({
+          url: irUrl,
+          html: "",
+          status: irRes.status,
+          contentType: irRes.contentType,
+          responseTimeMs: irRes.responseTimeMs,
+          lastModified: irRes.lastModified ?? undefined,
+          fetchQuality: irRes.status === 403 || irRes.status === 0 ? "blocked" : "blocked",
+          finalUrl: irRes.finalUrl || undefined,
+        });
       }
     } catch {
       // ignore
@@ -695,6 +748,19 @@ export async function crawlDomain(domainInput: string, options?: CrawlOptions): 
       }
     }
   }
+
+  onProgress?.("Probing Notified IR paths (final URL for NIR fingerprint)…");
+  const probedFinalUrls: ProbedUrl[] = [];
+  for (const path of FORCED_PROBE_PATHS) {
+    const probeUrl = path.startsWith("http") ? path : `${base}${path.startsWith("/") ? "" : "/"}${path}`;
+    try {
+      const r = await fetchOne(probeUrl, true);
+      probedFinalUrls.push({ requested: probeUrl, finalUrl: r.finalUrl || probeUrl, status: r.status });
+    } catch {
+      probedFinalUrls.push({ requested: probeUrl, finalUrl: probeUrl, status: 0 });
+    }
+  }
+
   onProgress?.(`Crawl complete. ${pages.length} pages fetched.`);
 
   return {
@@ -704,7 +770,8 @@ export async function crawlDomain(domainInput: string, options?: CrawlOptions): 
     pages,
     urlsFromCrawl,
     irUrlsFromCrawl,
-    firstPageFinalUrl: pages[0]?.finalUrl ?? pages[0]?.url,
+    firstPageFinalUrl: pages[0]?.finalUrl ?? pages[0]?.url ?? firstIrResult?.finalUrl ?? undefined,
+    probedFinalUrls,
   };
   } catch (e) {
     console.error("[crawler] crawlDomain error for", base, e);

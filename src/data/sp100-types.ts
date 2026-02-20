@@ -24,4 +24,6 @@ export interface SP100Row {
   irHostProvider?: string | null;
   /** Detected tools/feeds provider when host is Internal/Other (e.g. Notified, Multiple). */
   toolsFeedsProvider?: string | null;
+  /** First-page fetch outcome: OK, JS-shell, or blocked/403. */
+  fetchQuality?: string | null;
 }

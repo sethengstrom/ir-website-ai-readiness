@@ -35,6 +35,7 @@ function formatRow(row: SP100Row): string {
   if (row.lastScanned != null) parts.push(`lastScanned: ${JSON.stringify(row.lastScanned)}`);
   if (row.irHostProvider != null && row.irHostProvider !== "") parts.push(`irHostProvider: ${JSON.stringify(row.irHostProvider)}`);
   if (row.toolsFeedsProvider != null && row.toolsFeedsProvider !== "") parts.push(`toolsFeedsProvider: ${JSON.stringify(row.toolsFeedsProvider)}`);
+  if (row.fetchQuality != null && row.fetchQuality !== "") parts.push(`fetchQuality: ${JSON.stringify(row.fetchQuality)}`);
   return `  { ${parts.join(", ")} }`;
 }
 
@@ -78,6 +79,7 @@ async function main() {
             lastScanned: today,
             irHostProvider: analyzed.irHosting?.irHostProvider ?? null,
             toolsFeedsProvider: analyzed.irHosting?.toolsFeedsProvider ?? null,
+            fetchQuality: analyzed.firstPageFetchQuality ?? null,
           }
         : {
             ...row,
@@ -86,9 +88,11 @@ async function main() {
             lastScanned: today,
             irHostProvider: analyzed.irHosting?.irHostProvider ?? null,
             toolsFeedsProvider: analyzed.irHosting?.toolsFeedsProvider ?? null,
+            fetchQuality: analyzed.firstPageFetchQuality ?? null,
           };
       done++;
-      console.log(irHostOnly ? `OK irHost=${analyzed.irHosting?.irHostProvider ?? "—"}` : `OK overall=${analyzed.overallScore}`);
+      const fetchLabel = analyzed.firstPageFetchQuality ?? "—";
+      console.log(irHostOnly ? `OK irHost=${analyzed.irHosting?.irHostProvider ?? "—"} fetch=${fetchLabel}` : `OK overall=${analyzed.overallScore} fetch=${fetchLabel}`);
     } catch (e) {
       failed++;
       const msg = e instanceof Error ? e.message : String(e);
