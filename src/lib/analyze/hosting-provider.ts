@@ -10,6 +10,12 @@ import type { IrHostingResult, IrHostProvider, ToolsFeedsProvider } from "../typ
 import { isLikelyIRPath } from "../url-utils";
 import type { ProbedUrl } from "../crawler";
 import { detectVendorFromDns } from "../dns-vendor-detection";
+import {
+  KNOWN_Q4_HOSTS,
+  KNOWN_NOTIFIED_HOSTS,
+  KNOWN_EQUISOLVE_HOSTS,
+  KNOWN_INVESTIS_HOSTS,
+} from "../../data/known-ir-hosts";
 
 const CORE_PATH = /overview|about|news|press|events|presentations?|financials?/i;
 const TOOLS_PATH = /stock|quote|chart|sec|filings?|reports?/i;
@@ -67,9 +73,9 @@ function getFooterEquivalentText(html: string): string {
   return body.length > 2500 ? body.slice(-2500).replace(/\s+/g, " ").trim() : body.replace(/\s+/g, " ").trim();
 }
 
-/** True if "Powered by Q4" appears in footer-equivalent text or anywhere in raw HTML. */
+/** True if "Powered by Q4" appears in footer-equivalent text or anywhere in raw HTML (e.g. "Powered By Q4 Inc. 5.174.1.1"). */
 function hasPoweredByQ4(html: string): boolean {
-  const re = /Powered by Q4\s*(Inc\.?)?/i;
+  const re = /Powered\s+by\s+Q4\s*(Inc\.?)?(\s|[\d.]|$)/i;
   if (re.test(getFooterEquivalentText(html))) return true;
   return re.test(html);
 }
@@ -202,13 +208,24 @@ function detectVendorsOnPage(
 
   // Q4: "Powered by Q4" from full HTML or footer-equivalent; strong signals from assets/HTML/meta/inline
   const q4PoweredBy = hasPoweredByQ4(page.html);
-  const q4Host = hostMatches(["q4cdn.com", "q4web.com", "q4inc.com", "q4hosting.com", "q4app.com"]);
+  const Q4_HOSTS = [
+    "q4cdn.com",
+    "q4web.com",
+    "q4inc.com",
+    "q4hosting.com",
+    "q4app.com",
+    "q4systems.com",
+    "q4web.net",
+    "q4cdn.net",
+  ];
+  const q4Host = hostMatches(Q4_HOSTS);
   const q4CdnRef = anyAssetUrlContains(page.html, baseOrigin, "q4cdn");
   const q4AppRef = anyAssetUrlContains(page.html, baseOrigin, "q4app");
-  const q4StaticApiFeeds = anyAssetUrlContains(page.html, baseOrigin, "static.q4inc.com")
-    || anyAssetUrlContains(page.html, baseOrigin, "api.q4inc.com")
-    || anyAssetUrlContains(page.html, baseOrigin, "feeds.q4inc.com")
-    || anyAssetUrlContains(page.html, baseOrigin, "services.q4inc.com");
+  const q4StaticApiFeeds =
+    anyAssetUrlContains(page.html, baseOrigin, "static.q4inc.com") ||
+    anyAssetUrlContains(page.html, baseOrigin, "api.q4inc.com") ||
+    anyAssetUrlContains(page.html, baseOrigin, "feeds.q4inc.com") ||
+    anyAssetUrlContains(page.html, baseOrigin, "services.q4inc.com");
   const q4MetaGenerator = (() => {
     const $ = cheerio.load(page.html);
     const gen = $("meta[name='generator']").attr("content") || "";
@@ -220,6 +237,7 @@ function detectVendorsOnPage(
     "q4web.com",
     "q4inc.com",
     "q4hosting.com",
+    "q4systems.com",
     "q4inc.",
     "q4web.",
     "q4app.",
@@ -228,6 +246,8 @@ function detectVendorsOnPage(
     "feeds.q4inc.com",
     "services.q4inc.com",
     "q4api",
+    "q4web.net",
+    "q4cdn.net",
   ]);
   const q4Strong = q4Host || q4CdnRef || q4AppRef || q4StaticApiFeeds || q4MetaGenerator || q4InPageCode;
   const q4Signal = q4PoweredBy || q4Host || q4CdnRef || q4AppRef || q4InPageCode;
@@ -260,6 +280,8 @@ function detectVendorsOnPage(
     "notified.com",
     "intrado.com",
     "west.com",
+    "notified.eu",
+    "bnkm.com", // Notified / Bank of New York Mellon IR
   ];
   const notifiedStrongHost = hostMatches(NOTIFIED_STRONG_HOSTS);
   const notifiedPathFingerprints = pageHtmlContains(page.html, [
@@ -268,8 +290,18 @@ function detectVendorsOnPage(
     "news-releases.cfm",
     "eventdetail.cfm",
     "External.File?item=",
+    "eventdetail.zhtml",
+    "news-releases.zhtml",
+    "sec-filings.zhtml",
+    "financial-information.zhtml",
+    "investorrelations.",
+    "ir.notified",
   ]);
-  const notifiedWeakText = /Data provided by Refinitiv/i.test(text) || /Data provided by Kaleidoscope/i.test(text);
+  const notifiedWeakText =
+    /Data provided by Refinitiv/i.test(text) ||
+    /Data provided by Kaleidoscope/i.test(text) ||
+    /Powered by Notified/i.test(text) ||
+    /Notified\.com/i.test(text);
   const notifiedNir = findNirOnPage(page.url, page.html, baseOrigin);
   const notifiedStrong = notifiedStrongHost || notifiedPathFingerprints || !!notifiedNir;
   const notifiedSignal = notifiedStrong || notifiedWeakText;
@@ -315,35 +347,55 @@ function detectVendorsOnPage(
     });
   }
 
-  // Equisolve (QuoteMedia alone = medium unless paired with Equisolve; CDN used for IR assets e.g. Equifax)
-  const equisolveText = /QuoteMedia|Market data powered by QuoteMedia/i.test(text);
+  // Equisolve (QuoteMedia, CDN; common on IR sites e.g. Equifax, Walmart)
+  const equisolveText =
+    /QuoteMedia|Market data powered by QuoteMedia|Equisolve/i.test(text);
   const equisolveBrand = /Equisolve/i.test(text);
   const equisolveHost = hostMatches([
     "equisolve.com",
     "equisolve.net",
-    "d1io3yog0oux5.cloudfront.net", // Equisolve IR CDN (e.g. Equifax)
+    "equisolveclient.com",
+    "d1io3yog0oux5.cloudfront.net",
+    "d2c8v52m5u9mz0.cloudfront.net",
   ]);
-  if (equisolveText || equisolveHost || equisolveBrand) {
-    const confidence: "high" | "medium" = equisolveHost || equisolveBrand ? "high" : "medium";
+  const equisolveInHtml = pageHtmlContains(page.html, [
+    "equisolve",
+    "quotemedia",
+    "d1io3yog0oux5",
+  ]);
+  if (equisolveText || equisolveHost || equisolveBrand || equisolveInHtml) {
+    const confidence: "high" | "medium" =
+      equisolveHost || equisolveBrand || equisolveInHtml ? "high" : "medium";
     matches.push({
       vendor: "Equisolve",
-      onCore: core && (equisolveText || equisolveHost || equisolveBrand),
-      onTools: tools && (equisolveText || equisolveHost || equisolveBrand),
+      onCore: core && (equisolveText || equisolveHost || equisolveBrand || equisolveInHtml),
+      onTools: tools && (equisolveText || equisolveHost || equisolveBrand || equisolveInHtml),
       poweredByOnCore: false,
       confidence,
+      strongPlatformSignal: equisolveHost || equisolveBrand || equisolveInHtml,
     });
   }
 
-  // Investis
-  const investisText = /Investis Digital|An Investis Digital service/i.test(text);
-  const investisHost = hostMatches(["investisdigital.com", "investis.com"]);
-  if (investisText || investisHost) {
+  // Investis (Investis Digital; common on UK/EU IR sites)
+  const investisText =
+    /Investis Digital|An Investis Digital service|investis\.com/i.test(text);
+  const investisHost = hostMatches([
+    "investisdigital.com",
+    "investis.com",
+  ]);
+  const investisInHtml = pageHtmlContains(page.html, [
+    "investisdigital",
+    "investis.com",
+    "investis-digital",
+  ]);
+  if (investisText || investisHost || investisInHtml) {
     matches.push({
       vendor: "Investis",
-      onCore: core && (investisText || investisHost),
-      onTools: tools && (investisText || investisHost),
+      onCore: core && (investisText || investisHost || investisInHtml),
+      onTools: tools && (investisText || investisHost || investisInHtml),
       poweredByOnCore: false,
-      confidence: "high",
+      confidence: investisHost || investisInHtml ? "high" : "medium",
+      strongPlatformSignal: investisHost || investisInHtml,
     });
   }
 
@@ -366,6 +418,30 @@ const VENDOR_TO_TOOLS: Record<VendorId, ToolsFeedsProvider> = {
 
 /** Tie-break when multiple vendors match: prefer Equisolve over Q4 when both appear (Equisolve CDN = full IR platform; Q4 may be embedded widget only, e.g. Lyft). */
 const HOST_PRIORITY: VendorId[] = ["Equisolve", "Q4", "Notified", "Investis"];
+
+/** Min response body size (bytes) for a probed URL to count as valid for NIR fingerprint (avoids empty/error pages). */
+const MIN_PROBE_BODY_BYTES = 500;
+
+/** Notified infra hostnames: presence in fetched HTML counts as corroboration for probe NIR. */
+const NOTIFIED_INFRA_HOSTS = [
+  "gcs-web.com",
+  "stockpr.com",
+  "shareholder.com",
+  "notified.com",
+  "intrado.com",
+  "west.com",
+];
+
+/** True if any fetched page has NIR (field_nir_/nir_sec_) in HTML or same-origin links, or any Notified infra hostname. */
+function hasCorroborationForProbeNir(pages: CrawlPage[], baseOrigin: string): boolean {
+  const base = new URL(baseOrigin.startsWith("http") ? baseOrigin : "https://" + baseOrigin).origin;
+  for (const page of pages) {
+    if (findNirOnPage(page.url, page.html, baseOrigin)) return true;
+    const lower = page.html.toLowerCase();
+    if (NOTIFIED_INFRA_HOSTS.some((h) => lower.includes(h))) return true;
+  }
+  return false;
+}
 
 export interface HostingProviderOptions {
   /** Final URL of first page after redirects (for DNS fallback). */
@@ -443,15 +519,65 @@ export async function analyzeHostingProvider(
     }
   }
 
-  // Forced probe: NIR in any probed final URL (even on 403) is high-confidence Notified, bypasses tools-only
+  // Forced probe: NIR in probed URL counts only when (1) under IR base path, (2) 2xx + non-trivial body, (3) corroboration in fetched HTML/links or Notified infra, (4) not overriding strong Q4.
+  let debugProbeGates: IrHostingResult["debugProbeGates"] | undefined;
+  const irBasePath = (() => {
+    const first = pages[0]?.url;
+    if (!first) return "/";
+    try {
+      const p = new URL(first).pathname.replace(/\/+$/, "") || "/";
+      return p || "/";
+    } catch {
+      return "/";
+    }
+  })();
+  const contentCorroborated = hasCorroborationForProbeNir(pages, baseOrigin);
+  const q4StrongOnInScope =
+    (byVendor.get("Q4")?.strongPlatformSignalOnCore ?? false) ||
+    (byVendor.get("Q4")?.strongPlatformSignalOnNonToolsOnlyPage ?? false);
+
   if (options?.probedFinalUrls?.length) {
     for (const p of options.probedFinalUrls) {
       const u = (p.finalUrl || p.requested).toLowerCase();
       if (!/field_nir_|nir_sec_/.test(u)) continue;
+
+      const requestedPath = (() => {
+        try {
+          return new URL(p.requested).pathname.replace(/\/+$/, "") || "/";
+        } catch {
+          return "/";
+        }
+      })();
+      const basePathMatch =
+        irBasePath === "/" ||
+        requestedPath === irBasePath ||
+        requestedPath.startsWith(irBasePath + "/");
+      const statusOk =
+        p.status >= 200 &&
+        p.status < 300 &&
+        (p.bodySize ?? 0) >= MIN_PROBE_BODY_BYTES;
+      const overrideBlocked = q4StrongOnInScope;
+
+      const decisiveSignal =
+        /field_nir_/.test(u)
+          ? "NIR fingerprint (field_nir_) in probed URL"
+          : "NIR fingerprint (nir_sec_) in probed URL";
+      const sourcePage = p.finalUrl || p.requested;
+      debugProbeGates = {
+        decisiveSignal,
+        sourcePage,
+        basePathMatch,
+        statusOk,
+        contentCorroborated,
+        overrideBlocked,
+      };
+
+      const allowed =
+        basePathMatch && statusOk && contentCorroborated && !overrideBlocked;
+      if (!allowed) continue;
+
       const cur = byVendor.get("Notified");
       const scoreBonus = /field_nir_/.test(u) ? 10 : 8;
-      const source = p.finalUrl || p.requested;
-      const signalLabel = /field_nir_/.test(u) ? "NIR fingerprint (field_nir_) in probed URL" : "NIR fingerprint (nir_sec_) in probed URL";
       byVendor.set("Notified", {
         coreCount: cur?.coreCount ?? 0,
         sawOnCore: cur?.sawOnCore ?? false,
@@ -464,8 +590,8 @@ export async function analyzeHostingProvider(
         notifiedNirSignal: true,
         maxConfidence: "high",
         score: Math.min(100, (cur?.score ?? 0) + scoreBonus),
-        exampleDecisiveSignal: cur?.exampleDecisiveSignal ?? signalLabel,
-        exampleSourcePage: cur?.exampleSourcePage ?? source,
+        exampleDecisiveSignal: cur?.exampleDecisiveSignal ?? decisiveSignal,
+        exampleSourcePage: cur?.exampleSourcePage ?? sourcePage,
       });
     }
   }
@@ -534,11 +660,8 @@ export async function analyzeHostingProvider(
             : "1 core + strong signal";
   }
 
-  // Fallback when fetch quality is poor or origin/paths blocked: DNS/CNAME on IR hostname
-  if (
-    hostProvider === "Internal/Other" &&
-    (options?.firstPageFetchQuality === "blocked" || options?.firstPageFetchQuality === "JS-shell" || pages.length === 0)
-  ) {
+  // Fallback: DNS/CNAME on IR hostname for any Internal/Other (catches vendor subdomains even when HTML has no fingerprint)
+  if (hostProvider === "Internal/Other") {
     let hostname: string;
     try {
       const urlToUse =
@@ -563,7 +686,7 @@ export async function analyzeHostingProvider(
           confidence = "medium";
           debugDecisiveSignal = `DNS/CNAME: ${dnsVendor.matched}`;
           debugSourcePage = "origin";
-          debugHostReason = "DNS/CNAME fallback (poor fetch)";
+          debugHostReason = "DNS/CNAME fallback";
         }
       } catch {
         // ignore DNS errors
@@ -571,7 +694,7 @@ export async function analyzeHostingProvider(
     }
   }
 
-  // Fallback: known Q4-hosted IR domains that don't expose Q4 in server-rendered HTML (e.g. client-rendered)
+  // Fallback: known vendor hostnames from curated list (client-rendered or missed by fingerprints)
   if (hostProvider === "Internal/Other") {
     let hostname: string;
     try {
@@ -579,14 +702,27 @@ export async function analyzeHostingProvider(
     } catch {
       hostname = "";
     }
-    const knownQ4Hosts = [
-      "investor.nvidia.com",
-      "www.oracle.com",
-    ];
-    if (hostname && knownQ4Hosts.some((h) => hostname === h || hostname.endsWith("." + h))) {
+    const matchesKnown = (list: string[]) =>
+      hostname && list.some((h) => hostname === h || hostname.endsWith("." + h));
+    if (matchesKnown(KNOWN_Q4_HOSTS)) {
       hostProvider = "Q4 Inc.";
       confidence = "medium";
-      debugDecisiveSignal = "known Q4 domain fallback";
+      debugDecisiveSignal = "known Q4 domain";
+      debugSourcePage = "origin";
+    } else if (matchesKnown(KNOWN_NOTIFIED_HOSTS)) {
+      hostProvider = "Notified";
+      confidence = "medium";
+      debugDecisiveSignal = "known Notified domain";
+      debugSourcePage = "origin";
+    } else if (matchesKnown(KNOWN_EQUISOLVE_HOSTS)) {
+      hostProvider = "Equisolve";
+      confidence = "medium";
+      debugDecisiveSignal = "known Equisolve domain";
+      debugSourcePage = "origin";
+    } else if (matchesKnown(KNOWN_INVESTIS_HOSTS)) {
+      hostProvider = "Investis";
+      confidence = "medium";
+      debugDecisiveSignal = "known Investis domain";
       debugSourcePage = "origin";
     }
   }
@@ -612,5 +748,6 @@ export async function analyzeHostingProvider(
     ...(debugSourcePage != null && { debugSourcePage }),
     ...(debugHostReason != null && { debugHostReason }),
     ...(Object.keys(debugVendorScores).length > 0 && { debugVendorScores }),
+    ...(debugProbeGates && { debugProbeGates }),
   };
 }

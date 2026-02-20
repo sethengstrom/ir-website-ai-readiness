@@ -130,12 +130,21 @@ const PHASE1A_COUNT = 3;
 const MAX_IR_PAGES = 3;
 /** Max earnings/events/presentations links to fetch in phase 2 (aim for ~20s scan time with more accurate results). */
 const MAX_FOLLOWUP = 20;
-/** Same-origin IR paths to probe for Notified NIR fingerprint (final URL checked even on 403). */
+/** Same-origin IR paths to probe for vendor fingerprints; final URL and (when 200) HTML used for detection even on 403. */
 const FORCED_PROBE_PATHS = [
   "/sec-filings?order=field_nir_sec_form&sort=asc&items_per_page=10&mobile=1",
+  "/sec-filings",
   "/press-releases",
   "/events-and-presentations",
   "/financial-information",
+  "/overview",
+  "/overview/default.aspx",
+  "/investors/overview",
+  "/investor/overview",
+  "/stock-quote",
+  "/stock-information",
+  "/news",
+  "/news-releases",
 ];
 /** Browser header profiles: try Chrome then Safari (and optionally Firefox) to avoid 403 on Notified etc. */
 const BROWSER_HEADER_PROFILES: ReadonlyArray<Record<string, string>> = [
@@ -213,11 +222,13 @@ export interface CrawlPage {
   finalUrl?: string;
 }
 
-/** Result of probing a path (e.g. forced Notified probe); final URL used for NIR fingerprint even on 403. */
+/** Result of probing a path (e.g. forced Notified probe); final URL used for NIR fingerprint when gates pass. */
 export interface ProbedUrl {
   requested: string;
   finalUrl: string;
   status: number;
+  /** Response body length when status is 2xx; used to require non-trivial content before trusting NIR in URL. */
+  bodySize?: number;
 }
 
 export interface CrawlResult {
@@ -751,11 +762,31 @@ export async function crawlDomain(domainInput: string, options?: CrawlOptions): 
 
   onProgress?.("Probing Notified IR paths (final URL for NIR fingerprint)…");
   const probedFinalUrls: ProbedUrl[] = [];
+  // Probe only relative to discovered IR base path (e.g. /investor -> /investor/sec-filings, never /sec-filings at root).
+  const firstPageUrl = pages[0]?.url;
+  let irBasePath = "/";
+  if (firstPageUrl) {
+    try {
+      const p = new URL(firstPageUrl).pathname.replace(/\/+$/, "") || "/";
+      irBasePath = p || "/";
+    } catch {
+      // keep "/"
+    }
+  }
   for (const path of FORCED_PROBE_PATHS) {
-    const probeUrl = path.startsWith("http") ? path : `${base}${path.startsWith("/") ? "" : "/"}${path}`;
+    const pathNorm = path.startsWith("/") ? path : `/${path}`;
+    const probePath = irBasePath === "/" ? pathNorm : irBasePath + pathNorm;
+    const probeUrl = path.startsWith("http") ? path : `${base}${probePath}`;
     try {
       const r = await fetchOne(probeUrl, true);
-      probedFinalUrls.push({ requested: probeUrl, finalUrl: r.finalUrl || probeUrl, status: r.status });
+      const bodySize =
+        r.status >= 200 && r.status < 300 && r.body ? r.body.length : undefined;
+      probedFinalUrls.push({
+        requested: probeUrl,
+        finalUrl: r.finalUrl || probeUrl,
+        status: r.status,
+        ...(bodySize !== undefined && { bodySize }),
+      });
     } catch {
       probedFinalUrls.push({ requested: probeUrl, finalUrl: probeUrl, status: 0 });
     }

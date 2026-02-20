@@ -88,6 +88,15 @@ export interface IrHostingResult {
   debugHostReason?: string;
   /** Debug: per-vendor scores (0–100) for diagnosing misses. */
   debugVendorScores?: Record<string, number>;
+  /** Debug: when Notified NIR came from a forced probe, gate results (basePathMatch, statusOk, contentCorroborated, overrideBlocked). */
+  debugProbeGates?: {
+    decisiveSignal: string;
+    sourcePage: string;
+    basePathMatch: boolean;
+    statusOk: boolean;
+    contentCorroborated: boolean;
+    overrideBlocked: boolean;
+  };
 }
 
 export interface DomainResult {

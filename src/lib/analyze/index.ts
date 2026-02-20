@@ -11,6 +11,7 @@ import { analyzeResponseMetrics } from "./response-metrics";
 import { analyzeInvestorQuestionCoverage, getUnavailableInvestorCoverage } from "./investor-questions";
 import { extractJsonLdFacts } from "./json-ld-facts";
 import { analyzeHostingProvider } from "./hosting-provider";
+import { renderWithPlaywright } from "../playwright-render";
 
 const DEFAULT_CATEGORY_SCORE = 0;
 const EMPTY_FINDINGS: Finding[] = [];
@@ -91,10 +92,33 @@ export async function analyzeDomain(result: CrawlResult, options?: AnalyzeOption
   );
   onProgress?.("Detecting IR hosting provider…");
   const firstPage = result.pages[0];
+  let pagesForHosting = result.pages;
+  const usePlaywrightForHosting =
+    result.pages.length > 0 &&
+    process.env.PLAYWRIGHT_RENDER === "1" &&
+    (firstPage?.fetchQuality === "JS-shell" ||
+      firstPage?.fetchQuality === "blocked" ||
+      !firstPage?.html?.trim());
+  if (usePlaywrightForHosting) {
+    onProgress?.("Rendering first page with Playwright (JS-shell/blocked fallback)…");
+    const firstUrl = result.firstPageFinalUrl || firstPage.url || result.origin;
+    const rendered = await renderWithPlaywright(firstUrl);
+    if (rendered?.html) {
+      pagesForHosting = [
+        {
+          ...firstPage,
+          html: rendered.html,
+          url: rendered.finalUrl,
+          finalUrl: rendered.finalUrl,
+        },
+        ...result.pages.slice(1),
+      ];
+    }
+  }
   const irHosting = await runAnalyzerAsync(
     "irHosting",
     () =>
-      analyzeHostingProvider(result.pages, result.origin, {
+      analyzeHostingProvider(pagesForHosting, result.origin, {
         firstPageFinalUrl: result.firstPageFinalUrl,
         firstPageFetchQuality: firstPage?.fetchQuality,
         probedFinalUrls: result.probedFinalUrls,
